@@ -10,12 +10,15 @@ restarts are caught too.
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
 import random
 import signal
+import time
 import urllib.request
+from dataclasses import dataclass
 
 import websockets
 from confluent_kafka import Consumer, KafkaException, Producer, TopicPartition
@@ -27,6 +30,9 @@ TOPIC = os.getenv("KAFKA_TOPIC", "raw.trades")
 PRODUCTS = os.getenv("PRODUCTS", "BTC-USD,ETH-USD,SOL-USD").split(",")
 MAX_BACKFILL_TRADES = int(os.getenv("MAX_BACKFILL_TRADES", "100000"))
 STARTUP_SCAN_MESSAGES = int(os.getenv("STARTUP_SCAN_MESSAGES", "5000"))
+# Shutdown budget: backfill wait + flush must fit inside Docker's stop_grace_period
+SHUTDOWN_BACKFILL_TIMEOUT = float(os.getenv("SHUTDOWN_BACKFILL_TIMEOUT", "5"))
+SHUTDOWN_FLUSH_TIMEOUT = float(os.getenv("SHUTDOWN_FLUSH_TIMEOUT", "10"))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("producer")
@@ -74,12 +80,14 @@ def load_last_trade_ids() -> dict[str, int]:
                 assignments.append(TopicPartition(TOPIC, p, max(low, high - STARTUP_SCAN_MESSAGES)))
         consumer.assign(assignments)
 
+        # Short polls under an overall deadline: a long consume() timeout would wait for a
+        # full batch even when only a few messages are left
+        deadline = time.monotonic() + 15
         while remaining:
-            msgs = consumer.consume(num_messages=500, timeout=5)
-            if not msgs:
+            if time.monotonic() > deadline:
                 log.warning("startup scan timed out, %d partitions unread", len(remaining))
                 break
-            for msg in msgs:
+            for msg in consumer.consume(num_messages=500, timeout=0.2):
                 if msg.error():
                     continue
                 trade = json.loads(msg.value())
@@ -103,8 +111,23 @@ def fetch_trades_before(product: str, trade_id: int) -> list[dict]:
         return json.load(resp)
 
 
-async def backfill(producer: Producer, product: str, lo: int, hi: int):
+@dataclass
+class BackfillJob:
+    """Progress of one backfill, so a cut-off job can report what it didn't fetch."""
+
+    product: str
+    lo: int  # last trade_id before the gap
+    hi: int  # first trade_id after the gap
+    cursor: int  # cursor..hi-1 has been produced (pages are fetched newest-first)
+
+    def unfetched(self) -> tuple[int, int] | None:
+        """Inclusive trade_id range not yet produced, or None if complete."""
+        return (self.lo + 1, self.cursor - 1) if self.cursor > self.lo + 1 else None
+
+
+async def backfill(producer: Producer, job: BackfillJob):
     """Produce the trades with lo < trade_id < hi, fetched from the REST API."""
+    product, lo, hi = job.product, job.lo, job.hi
     missing = hi - lo - 1
     if missing > MAX_BACKFILL_TRADES:
         log.error("gap too large to backfill: %s trade_id %d..%d (%d trades)", product, lo + 1, hi - 1, missing)
@@ -112,11 +135,10 @@ async def backfill(producer: Producer, product: str, lo: int, hi: int):
     log.warning("gap detected: %s missing %d trades (%d..%d), backfilling", product, missing, lo + 1, hi - 1)
 
     sent = 0
-    cursor = hi
     try:
-        while cursor > lo + 1:
+        while job.cursor > lo + 1:
             # Blocking HTTP runs in a worker thread so the live stream keeps flowing
-            trades = await asyncio.to_thread(fetch_trades_before, product, cursor)
+            trades = await asyncio.to_thread(fetch_trades_before, product, job.cursor)
             if not trades:
                 break
             for trade in trades:
@@ -127,7 +149,7 @@ async def backfill(producer: Producer, product: str, lo: int, hi: int):
                 producer.produce(TOPIC, key=product, value=json.dumps(record), on_delivery=on_delivery)
                 sent += 1
             producer.poll(0)
-            cursor = trades[-1]["trade_id"]
+            job.cursor = max(trades[-1]["trade_id"], lo + 1)
             await asyncio.sleep(0.25)  # stay well under the public REST rate limit
     except Exception:
         log.exception("backfill failed for %s after %d of %d trades (%d..%d)", product, sent, missing, lo + 1, hi - 1)
@@ -135,12 +157,14 @@ async def backfill(producer: Producer, product: str, lo: int, hi: int):
     log.info("backfill done: %s sent %d of %d missing trades", product, sent, missing)
 
 
-async def stream_trades(producer: Producer, stop: asyncio.Event, last_trade_id: dict[str, int]):
+async def stream_trades(
+    producer: Producer, last_trade_id: dict[str, int], backfills: dict[asyncio.Task, BackfillJob]
+):
+    """Stream live trades until cancelled."""
     subscribe = {"type": "subscribe", "product_ids": PRODUCTS, "channels": ["matches"]}
     backoff = 1
-    backfills: set[asyncio.Task] = set()
 
-    while not stop.is_set():
+    while True:
         try:
             async with websockets.connect(COINBASE_WS_URL, ping_interval=20) as ws:
                 # Coinbase drops connections that don't subscribe within ~5s
@@ -155,17 +179,16 @@ async def stream_trades(producer: Producer, stop: asyncio.Event, last_trade_id: 
                         prev = last_trade_id.get(product)
                         # trade_id increments by 1 per product, so a jump means missed trades
                         if prev is not None and trade_id > prev + 1:
-                            task = asyncio.create_task(backfill(producer, product, prev, trade_id))
-                            backfills.add(task)
-                            task.add_done_callback(backfills.discard)
+                            job = BackfillJob(product, lo=prev, hi=trade_id, cursor=trade_id)
+                            task = asyncio.create_task(backfill(producer, job))
+                            backfills[task] = job
+                            task.add_done_callback(lambda t: backfills.pop(t, None))
                         last_trade_id[product] = max(prev or 0, trade_id)
 
                         producer.produce(TOPIC, key=product, value=raw, on_delivery=on_delivery)
                         producer.poll(0)  # serve delivery callbacks without blocking
                     elif msg["type"] == "error":
                         log.error("coinbase error: %s", msg)
-                    if stop.is_set():
-                        break
             log.warning("connection closed by server, reconnecting")
         except Exception as e:
             delay = backoff + random.uniform(0, 1)  # jitter
@@ -177,22 +200,56 @@ async def stream_trades(producer: Producer, stop: asyncio.Event, last_trade_id: 
             backoff = min(backoff * 2, 60)
 
 
+async def wait_for_backfills(backfills: dict[asyncio.Task, BackfillJob], timeout: float):
+    """Give running backfills up to `timeout` seconds, then cancel them and log what they didn't fetch."""
+    if not backfills:
+        return
+    jobs = dict(backfills)
+    log.info("waiting up to %.0fs for %d running backfill(s)", timeout, len(jobs))
+    _, pending = await asyncio.wait(jobs, timeout=timeout)
+    for task in pending:
+        task.cancel()
+    await asyncio.gather(*pending, return_exceptions=True)
+    for task in pending:
+        if gap := jobs[task].unfetched():
+            log.error("backfill cut off by shutdown: %s trade_id %d..%d not fetched", jobs[task].product, *gap)
+
+
 async def main():
     producer = make_producer()
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, stop.set)
 
-    # Resume from what's already in Kafka so a gap across restarts is backfilled
-    last_trade_id = load_last_trade_ids()
+    def on_signal():
+        if stop.is_set():
+            log.warning("second signal received, exiting immediately without flushing")
+            os._exit(130)
+        log.info("shutdown requested (send again to force exit)")
+        stop.set()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, on_signal)
+
+    # Resume from what's already in Kafka so a gap across restarts is backfilled.
+    # In a thread so signals are still handled while Kafka is slow to answer.
+    last_trade_id = await asyncio.to_thread(load_last_trade_ids)
     log.info("resuming from last trade_ids in Kafka: %s", last_trade_id or "none found")
 
-    task = asyncio.create_task(stream_trades(producer, stop, last_trade_id))
+    backfills: dict[asyncio.Task, BackfillJob] = {}
+    stream = asyncio.create_task(stream_trades(producer, last_trade_id, backfills))
     await stop.wait()
-    task.cancel()
-    log.info("shutting down, flushing %d pending messages", len(producer))
-    producer.flush(10)
+
+    # 1. Stop reading new trades
+    stream.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await stream
+    # 2. Let in-flight backfills finish, within a deadline
+    await wait_for_backfills(backfills, SHUTDOWN_BACKFILL_TIMEOUT)
+    # 3. Deliver what's queued. In a thread so a second signal can still force exit.
+    log.info("flushing %d pending messages", len(producer))
+    undelivered = await asyncio.to_thread(producer.flush, SHUTDOWN_FLUSH_TIMEOUT)
+    if undelivered:
+        log.error("shutdown: %d messages were not delivered", undelivered)
 
 
 if __name__ == "__main__":
