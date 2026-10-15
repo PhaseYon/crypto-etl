@@ -86,34 +86,44 @@ def load_last_trade_ids(settings: Settings) -> dict[str, int]:
             "enable.auto.commit": False,
         }
     )
+    deadline = time.monotonic() + settings.startup_scan_timeout
     try:
-        return max_trade_ids(_read_tails(consumer, settings), settings.products)
-    except KafkaException as e:
-        log.warning("could not read last trade_ids from Kafka (%s), starting without them", e)
-        return {}
+        while True:
+            try:
+                return max_trade_ids(_read_tails(consumer, settings, deadline), settings.products)
+            except KafkaException as e:
+                # Retry transient errors (e.g. a partition briefly without a leader) while time remains
+                if time.monotonic() + 0.5 >= deadline:
+                    log.warning("could not read last trade_ids from Kafka (%s), starting without them", e)
+                    return {}
+                log.info("startup scan failed (%s), retrying", e)
+                time.sleep(0.5)
     finally:
         consumer.close()
 
 
-def _read_tails(consumer: Consumer, settings: Settings) -> list[bytes]:
+def _read_tails(consumer: Consumer, settings: Settings, deadline: float) -> list[bytes]:
     topic = settings.topic
-    metadata = consumer.list_topics(topic, timeout=10).topics[topic]
+
+    def time_left() -> float:
+        return max(deadline - time.monotonic(), 0.1)
+
+    metadata = consumer.list_topics(topic, timeout=time_left()).topics[topic]
     if metadata.error is not None:
         raise KafkaException(metadata.error)
 
     remaining = {}  # partition -> offset of its last message
     assignments = []
     for p in metadata.partitions:
-        low, high = consumer.get_watermark_offsets(TopicPartition(topic, p), timeout=10)
+        low, high = consumer.get_watermark_offsets(TopicPartition(topic, p), timeout=time_left())
         if high > low:
             remaining[p] = high - 1
             assignments.append(TopicPartition(topic, p, max(low, high - settings.startup_scan_messages)))
     consumer.assign(assignments)
 
     values = []
-    # Short polls under an overall deadline: a long consume() timeout would wait for a
+    # Short polls under the overall deadline: a long consume() timeout would wait for a
     # full batch even when only a few messages are left
-    deadline = time.monotonic() + settings.startup_scan_timeout
     while remaining:
         if time.monotonic() > deadline:
             log.warning("startup scan timed out, %d partitions unread", len(remaining))
