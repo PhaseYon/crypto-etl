@@ -74,8 +74,20 @@ def test_random_walk_has_no_real_edge():
 
 def test_cli_end_to_end_on_local_table(tmp_path, capsys):
     write_ohlcv_delta(generate_ohlcv(["BTC-USD"], T0, 3000, seed=4), str(tmp_path))
-    result = main(["--products", "BTC-USD", "--horizon", "5", "--table-uri", str(tmp_path),
-                   "--start", "2026-01-01T00:00:00Z", "--end", "2026-01-03T00:00:00Z"])
+    result = main(
+        [
+            "--products",
+            "BTC-USD",
+            "--horizon",
+            "5",
+            "--table-uri",
+            str(tmp_path),
+            "--start",
+            "2026-01-01T00:00:00Z",
+            "--end",
+            "2026-01-03T00:00:00Z",
+        ]
+    )
     assert result.split_sizes["test"] > 0
     out = capsys.readouterr().out
     assert "gbm" in out and "momentum" in out

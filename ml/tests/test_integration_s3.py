@@ -39,11 +39,23 @@ def lake(monkeypatch):
         pytest.fail(f"S3 store not reachable at {endpoint}")
 
     bucket = f"cetl-ml-it-{uuid.uuid4().hex[:8]}"
-    s3 = fs.S3FileSystem(access_key=key, secret_key=secret, endpoint_override=url.netloc, scheme=url.scheme,
-                         region="us-east-1", allow_bucket_creation=True, allow_bucket_deletion=True)
+    s3 = fs.S3FileSystem(
+        access_key=key,
+        secret_key=secret,
+        endpoint_override=url.netloc,
+        scheme=url.scheme,
+        region="us-east-1",
+        allow_bucket_creation=True,
+        allow_bucket_deletion=True,
+    )
     s3.create_dir(bucket)
-    for name, value in {"LAKE_BUCKET": bucket, "S3_ENDPOINT": endpoint, "AWS_REGION": "us-east-1",
-                        "AWS_ACCESS_KEY_ID": key, "AWS_SECRET_ACCESS_KEY": secret}.items():
+    for name, value in {
+        "LAKE_BUCKET": bucket,
+        "S3_ENDPOINT": endpoint,
+        "AWS_REGION": "us-east-1",
+        "AWS_ACCESS_KEY_ID": key,
+        "AWS_SECRET_ACCESS_KEY": secret,
+    }.items():
         monkeypatch.setenv(name, value)
     yield StorageConfig.from_env()
     s3.delete_dir(bucket)

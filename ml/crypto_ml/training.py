@@ -25,8 +25,12 @@ class TrainResult:
 
     def flat_metrics(self) -> dict[str, float]:
         """{'gbm.test.roc_auc': 0.51, ...} for experiment tracking."""
-        return {f"{m}.{s}.{k}": v for m, splits in self.metrics.items() for s, vals in splits.items()
-                for k, v in vals.items()}
+        return {
+            f"{m}.{s}.{k}": v
+            for m, splits in self.metrics.items()
+            for s, vals in splits.items()
+            for k, v in vals.items()
+        }
 
 
 def train_and_evaluate(

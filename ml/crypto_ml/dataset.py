@@ -10,7 +10,7 @@ import pandas as pd
 
 from crypto_ml.features import FEATURE_COLUMNS, build_features
 
-LABEL = "label"          # 1 if the forward log return over the horizon is > 0, else 0 (down or flat)
+LABEL = "label"  # 1 if the forward log return over the horizon is > 0, else 0 (down or flat)
 TARGET_RETURN = "fwd_ret"
 
 

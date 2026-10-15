@@ -16,13 +16,25 @@ def _rows(product: str, minutes: int, start: datetime = T0) -> list[dict]:
     rows = []
     for i in range(minutes):
         ws = start + timedelta(minutes=i)
-        rows.append({
-            "product_id": product, "window_start": ws, "window_end": ws + timedelta(minutes=1),
-            "open": 100.0 + i, "high": 101.0 + i, "low": 99.0 + i, "close": 100.5 + i,
-            "volume": 2.0, "quote_volume": 201.0 + 2 * i, "vwap": 100.5 + i, "trade_count": 3,
-            "buy_volume": 1.0, "sell_volume": 1.0, "updated_at": ws + timedelta(minutes=2),
-            "window_date": ws.date(),
-        })
+        rows.append(
+            {
+                "product_id": product,
+                "window_start": ws,
+                "window_end": ws + timedelta(minutes=1),
+                "open": 100.0 + i,
+                "high": 101.0 + i,
+                "low": 99.0 + i,
+                "close": 100.5 + i,
+                "volume": 2.0,
+                "quote_volume": 201.0 + 2 * i,
+                "vwap": 100.5 + i,
+                "trade_count": 3,
+                "buy_volume": 1.0,
+                "sell_volume": 1.0,
+                "updated_at": ws + timedelta(minutes=2),
+                "window_date": ws.date(),
+            }
+        )
     return rows
 
 
@@ -32,8 +44,9 @@ def _write(path, rows, schema=OHLCV_ARROW_SCHEMA, mode="overwrite"):
 
 def test_reads_filters_and_sorts(tmp_path):
     _write(tmp_path, _rows("ETH-USD", 5) + _rows("BTC-USD", 5))
-    data = read_ohlcv(str(tmp_path), products=["BTC-USD"], start=T0 + timedelta(minutes=1),
-                      end=T0 + timedelta(minutes=4))
+    data = read_ohlcv(
+        str(tmp_path), products=["BTC-USD"], start=T0 + timedelta(minutes=1), end=T0 + timedelta(minutes=4)
+    )
     f = data.frame
     assert list(f["product_id"].unique()) == ["BTC-USD"]
     assert f["window_start"].min() == pd.Timestamp(T0 + timedelta(minutes=1))
@@ -73,8 +86,9 @@ def test_duplicate_keys_keep_latest(tmp_path):
 
 
 def test_schema_drift_fails_loudly(tmp_path):
-    drifted = pa.schema([f if f.name != "trade_count" else pa.field("trade_count", pa.float64())
-                         for f in OHLCV_ARROW_SCHEMA])
+    drifted = pa.schema(
+        [f if f.name != "trade_count" else pa.field("trade_count", pa.float64()) for f in OHLCV_ARROW_SCHEMA]
+    )
     _write(tmp_path, _rows("BTC-USD", 1), schema=drifted)
     with pytest.raises(SchemaDriftError, match="trade_count.*double, expected long"):
         read_ohlcv(str(tmp_path))

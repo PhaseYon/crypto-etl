@@ -55,7 +55,8 @@ def test_products_do_not_leak_into_each_other(ohlcv):
     together = build_features(ohlcv)
     alone = build_features(ohlcv[ohlcv["product_id"] == "ETH-USD"])
     pd.testing.assert_frame_equal(
-        together[together["product_id"] == "ETH-USD"].reset_index(drop=True), alone.reset_index(drop=True))
+        together[together["product_id"] == "ETH-USD"].reset_index(drop=True), alone.reset_index(drop=True)
+    )
 
 
 def test_features_are_causal(ohlcv):

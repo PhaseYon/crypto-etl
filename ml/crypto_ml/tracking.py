@@ -58,23 +58,32 @@ def log_training_run(
     configure()
     experiment_id = ensure_experiment(experiment)
     with mlflow.start_run(experiment_id=experiment_id) as run:
-        mlflow.log_params({**params, "horizon": result.horizon, "best_iteration": result.best_iteration,
-                           "n_features": len(result.feature_columns)})
+        mlflow.log_params(
+            {
+                **params,
+                "horizon": result.horizon,
+                "best_iteration": result.best_iteration,
+                "n_features": len(result.feature_columns),
+            }
+        )
         mlflow.log_params({f"gbm.{k}": v for k, v in result.model.get_params().items()})
         mlflow.log_params({f"split.{k}_rows": v for k, v in result.split_sizes.items()})
         mlflow.log_metrics({k: v for k, v in result.flat_metrics().items() if not math.isnan(v)})
-        mlflow.set_tags({
-            "data.table_uri": data_info["table_uri"],
-            "data.table_version": str(data_info["table_version"]),
-            "data.products": ",".join(data_info["products"]),
-            "data.start": str(data_info.get("start")),
-            "data.end": str(data_info.get("end")),
-            "data.rows": str(data_info.get("rows")),
-        })
+        mlflow.set_tags(
+            {
+                "data.table_uri": data_info["table_uri"],
+                "data.table_version": str(data_info["table_version"]),
+                "data.products": ",".join(data_info["products"]),
+                "data.start": str(data_info.get("start")),
+                "data.end": str(data_info.get("end")),
+                "data.rows": str(data_info.get("rows")),
+            }
+        )
         mlflow.log_dict({**result.split_bounds, "sizes": result.split_sizes}, "splits.json")
         mlflow.log_dict(model_meta(result, data_info), META_ARTIFACT)
-        mlflow.sklearn.log_model(result.model, name=MODEL_ARTIFACT, input_example=X_example.head(5),
-                                 skops_trusted_types=SKOPS_TRUSTED_TYPES)
+        mlflow.sklearn.log_model(
+            result.model, name=MODEL_ARTIFACT, input_example=X_example.head(5), skops_trusted_types=SKOPS_TRUSTED_TYPES
+        )
         mlflow.set_tag("model_logged", "true")
         return run.info.run_id
 

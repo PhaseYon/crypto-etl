@@ -19,8 +19,9 @@ def table(tmp_path):
 
 
 def _train(table, *extra):
-    args = build_parser().parse_args(["--products", "BTC-USD,ETH-USD", "--horizon", "5",
-                                      "--table-uri", table, "--experiment", "test-exp", *extra])
+    args = build_parser().parse_args(
+        ["--products", "BTC-USD,ETH-USD", "--horizon", "5", "--table-uri", table, "--experiment", "test-exp", *extra]
+    )
     return run(args)
 
 
@@ -43,6 +44,7 @@ def test_logged_model_reloads_with_identical_predictions(table):
     assert meta["horizon_minutes"] == 5 and meta["products"] == ["BTC-USD", "ETH-USD"]
     X = np.random.default_rng(0).normal(size=(10, len(result.feature_columns)))
     import pandas as pd
+
     X = pd.DataFrame(X, columns=result.feature_columns)
     np.testing.assert_allclose(model.predict_proba(X), result.model.predict_proba(X))
 

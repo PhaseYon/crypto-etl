@@ -52,16 +52,28 @@ def generate_ohlcv(
         price = base * np.exp(np.cumsum(rng.normal(0.0, per_trade_vol, size=n)))
         size = rng.lognormal(mean=np.log(base**-0.5), sigma=1.0, size=n)
         is_buy = rng.random(n) < 0.5
-        trades = pd.DataFrame({
-            "minute": minute_idx, "price": price, "size": size,
-            "notional": price * size, "buy_size": np.where(is_buy, size, 0.0),
-        })
+        trades = pd.DataFrame(
+            {
+                "minute": minute_idx,
+                "price": price,
+                "size": size,
+                "notional": price * size,
+                "buy_size": np.where(is_buy, size, 0.0),
+            }
+        )
         g = trades.groupby("minute", sort=True)
-        candles = pd.DataFrame({
-            "open": g["price"].first(), "high": g["price"].max(), "low": g["price"].min(),
-            "close": g["price"].last(), "volume": g["size"].sum(), "quote_volume": g["notional"].sum(),
-            "trade_count": g["price"].size().astype("int64"), "buy_volume": g["buy_size"].sum(),
-        })
+        candles = pd.DataFrame(
+            {
+                "open": g["price"].first(),
+                "high": g["price"].max(),
+                "low": g["price"].min(),
+                "close": g["price"].last(),
+                "volume": g["size"].sum(),
+                "quote_volume": g["notional"].sum(),
+                "trade_count": g["price"].size().astype("int64"),
+                "buy_volume": g["buy_size"].sum(),
+            }
+        )
         candles["sell_volume"] = candles["volume"] - candles["buy_volume"]
         candles["vwap"] = candles["quote_volume"] / candles["volume"]
         candles["window_start"] = start_ts + pd.to_timedelta(candles.index.to_numpy(), unit="min")
@@ -88,13 +100,15 @@ def to_arrow(df: pd.DataFrame) -> pa.Table:
     return pa.Table.from_pandas(df[list(OHLCV_DELTA_TYPES)], schema=OHLCV_ARROW_SCHEMA, preserve_index=False)
 
 
-def write_ohlcv_delta(df: pd.DataFrame, uri: str, mode: str = "overwrite",
-                      storage_options: dict[str, str] | None = None) -> None:
+def write_ohlcv_delta(
+    df: pd.DataFrame, uri: str, mode: str = "overwrite", storage_options: dict[str, str] | None = None
+) -> None:
     uri = normalize_uri(uri)
     if storage_options is None:
         storage_options = storage_options_for(uri)
-    write_deltalake(uri, to_arrow(df), mode=mode, partition_by=[OHLCV_PARTITION_COLUMN],
-                    storage_options=storage_options)
+    write_deltalake(
+        uri, to_arrow(df), mode=mode, partition_by=[OHLCV_PARTITION_COLUMN], storage_options=storage_options
+    )
 
 
 def main(argv: list[str] | None = None) -> None:

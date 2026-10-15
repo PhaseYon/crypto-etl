@@ -96,7 +96,8 @@ def _product_features(g: pd.DataFrame) -> pd.DataFrame:
     tc = g["trade_count"].astype("float64")
     mean_tc_15 = tc.rolling(15, min_periods=15).mean()
     f["trades_ratio_15_60"] = _safe_div(mean_tc_15, tc.rolling(60, min_periods=60).mean()).where(
-        tc.rolling(60, min_periods=60).mean().notna())
+        tc.rolling(60, min_periods=60).mean().notna()
+    )
     f["filled_frac_15"] = g["is_filled"].astype("float64").rolling(15, min_periods=15).mean()
 
     ts = g["window_start"]

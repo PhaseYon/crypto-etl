@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: ${{ matrix.component }} (lint + unit tests)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: producer
+            python: "3.14"
+            install: pip install -r requirements-dev.txt -r producer/requirements-dev.txt -e producer
+            test: pytest producer/tests
+          - component: ml
+            python: "3.14"
+            install: pip install -r requirements-dev.txt -r ml/requirements.txt -r ml/requirements-dev.txt
+            test: pytest ml
+          - component: api
+            python: "3.13"
+            install: pip install -r requirements-dev.txt -r api/requirements.txt -r api/requirements-dev.txt
+            test: pytest api/tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: ${{ matrix.install }}
+      - run: ruff check ${{ matrix.component }} && ruff format --check ${{ matrix.component }}
+      - run: ${{ matrix.test }}
+
+  lake:
+    name: lake (unit tests in the Spark image)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pipx run ruff==0.13.3 check lake && pipx run ruff==0.13.3 format --check lake
+      - run: cp .env.example .env && sed -i 's|<YOUR_ACCESS_KEY_ID>|ci-user|; s|<YOUR_SECRET_ACCESS_KEY>|ci-password-123|' .env
+      - run: lake/scripts/test.sh unit
+
+  ui:
+    name: ui (types, lint, format, unit tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci
+      - run: npm run ci
+
+  integration:
+    name: integration tests (Docker services)
+    runs-on: ubuntu-latest
+    needs: [python, lake]
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+      - run: cp .env.example .env && sed -i 's|<YOUR_ACCESS_KEY_ID>|ci-user|; s|<YOUR_SECRET_ACCESS_KEY>|ci-password-123|' .env
+      - run: pip install -r requirements-dev.txt -r producer/requirements-dev.txt -e producer
+      - run: docker compose up -d --wait kafka && docker compose run --rm kafka-init
+      - run: KAFKA_TEST_BOOTSTRAP=localhost:9092 pytest producer/tests -m integration
+      - run: lake/scripts/test.sh integration
+      - if: always()
+        run: docker compose down -v

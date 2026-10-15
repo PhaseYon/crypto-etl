@@ -25,17 +25,19 @@ from crypto_ml.train import parse_time
 
 log = logging.getLogger("crypto_ml.predict")
 
-PREDICTIONS_SCHEMA = pa.schema([
-    ("product_id", pa.string()),
-    ("window_start", pa.timestamp("us", tz="UTC")),
-    ("horizon_minutes", pa.int64()),
-    ("model_run_id", pa.string()),
-    ("p_up", pa.float64()),
-    ("predicted_label", pa.int64()),
-    ("is_filled", pa.int64()),
-    ("created_at", pa.timestamp("us", tz="UTC")),
-    ("prediction_date", pa.date32()),
-])
+PREDICTIONS_SCHEMA = pa.schema(
+    [
+        ("product_id", pa.string()),
+        ("window_start", pa.timestamp("us", tz="UTC")),
+        ("horizon_minutes", pa.int64()),
+        ("model_run_id", pa.string()),
+        ("p_up", pa.float64()),
+        ("predicted_label", pa.int64()),
+        ("is_filled", pa.int64()),
+        ("created_at", pa.timestamp("us", tz="UTC")),
+        ("prediction_date", pa.date32()),
+    ]
+)
 MERGE_KEY = ("product_id", "window_start", "model_run_id")
 
 
@@ -43,8 +45,9 @@ class StaleDataError(RuntimeError):
     """Gold has no candles close enough to the scoring time."""
 
 
-def score(model, meta: dict, ohlcv: pd.DataFrame, run_id: str, score_minutes: int,
-          now: datetime | None = None) -> pd.DataFrame:
+def score(
+    model, meta: dict, ohlcv: pd.DataFrame, run_id: str, score_minutes: int, now: datetime | None = None
+) -> pd.DataFrame:
     """Predictions for the last `score_minutes` minutes of each product with complete features."""
     cols = meta["feature_columns"]
     feats = build_features(ohlcv).dropna(subset=cols)
@@ -53,17 +56,19 @@ def score(model, meta: dict, ohlcv: pd.DataFrame, run_id: str, score_minutes: in
         return PREDICTIONS_SCHEMA.empty_table().to_pandas()
     p_up = model.predict_proba(latest[cols])[:, 1]
     created = pd.Timestamp(now or datetime.now(UTC))
-    return pd.DataFrame({
-        "product_id": latest["product_id"],
-        "window_start": latest["window_start"],
-        "horizon_minutes": int(meta["horizon_minutes"]),
-        "model_run_id": run_id,
-        "p_up": p_up,
-        "predicted_label": (p_up > 0.5).astype("int64"),
-        "is_filled": latest["is_filled"].astype("int64"),
-        "created_at": created,
-        "prediction_date": latest["window_start"].dt.date,
-    })
+    return pd.DataFrame(
+        {
+            "product_id": latest["product_id"],
+            "window_start": latest["window_start"],
+            "horizon_minutes": int(meta["horizon_minutes"]),
+            "model_run_id": run_id,
+            "p_up": p_up,
+            "predicted_label": (p_up > 0.5).astype("int64"),
+            "is_filled": latest["is_filled"].astype("int64"),
+            "created_at": created,
+            "prediction_date": latest["window_start"].dt.date,
+        }
+    )
 
 
 def write_predictions(preds: pd.DataFrame, uri: str, storage_options: dict[str, str] | None = None) -> None:
@@ -75,11 +80,13 @@ def write_predictions(preds: pd.DataFrame, uri: str, storage_options: dict[str, 
         write_deltalake(uri, table, partition_by=["prediction_date"], storage_options=storage_options)
         return
     predicate = " AND ".join(f"t.{k} = s.{k}" for k in MERGE_KEY)
-    (DeltaTable(uri, storage_options=storage_options)
-     .merge(source=table, predicate=predicate, source_alias="s", target_alias="t")
-     .when_matched_update_all()
-     .when_not_matched_insert_all()
-     .execute())
+    (
+        DeltaTable(uri, storage_options=storage_options)
+        .merge(source=table, predicate=predicate, source_alias="s", target_alias="t")
+        .when_matched_update_all()
+        .when_not_matched_insert_all()
+        .execute()
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -89,8 +96,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--products", help="Comma-separated (default: the products the model was trained on)")
     p.add_argument("--as-of", type=parse_time, help="Score up to this UTC time (default: now)")
     p.add_argument("--score-minutes", type=int, default=1, help="Most recent minutes to score per product")
-    p.add_argument("--max-staleness-minutes", type=int, default=15,
-                   help="Fail if a product's newest candle is older than this before --as-of")
+    p.add_argument(
+        "--max-staleness-minutes",
+        type=int,
+        default=15,
+        help="Fail if a product's newest candle is older than this before --as-of",
+    )
     p.add_argument("--table-uri", help=f"gold table (default: s3://$LAKE_BUCKET/{GOLD_OHLCV_PATH})")
     p.add_argument("--output-uri", help=f"predictions table (default: s3://$LAKE_BUCKET/{PREDICTIONS_PATH})")
     return p

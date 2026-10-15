@@ -59,7 +59,7 @@ def storage_options_for(uri: str, config: StorageConfig | None = None) -> dict[s
 
 def normalize_uri(uri: str) -> str:
     """delta-rs speaks s3://, Spark speaks s3a://; accept both."""
-    return "s3://" + uri[len("s3a://"):] if uri.startswith("s3a://") else uri
+    return "s3://" + uri[len("s3a://") :] if uri.startswith("s3a://") else uri
 
 
 GOLD_OHLCV_PATH = "gold/ohlcv_1m"

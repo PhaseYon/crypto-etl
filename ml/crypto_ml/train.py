@@ -1,6 +1,6 @@
 """CLI: train a direction model on gold/ohlcv_1m and compare it with baselines.
 
-    python -m crypto_ml.train --products BTC-USD,ETH-USD --start 2026-10-01 --end 2026-10-08 --horizon 5
+python -m crypto_ml.train --products BTC-USD,ETH-USD --start 2026-10-01 --end 2026-10-08 --horizon 5
 """
 
 from __future__ import annotations
@@ -59,18 +59,29 @@ def run(args: argparse.Namespace) -> tuple[TrainResult, dict, str | None]:
     log.info("read %d candles from %s (version %d)", len(data_in.frame), uri, data_in.table_version)
 
     dataset = build_dataset(data_in.frame, args.horizon)
-    result = train_and_evaluate(dataset, args.horizon, seed=args.seed, train_frac=args.train_frac,
-                                val_frac=args.val_frac, embargo=args.embargo)
-    data_info = {"table_uri": uri, "table_version": data_in.table_version, "products": products,
-                 "start": args.start.isoformat() if args.start else None,
-                 "end": args.end.isoformat() if args.end else None, "rows": len(dataset)}
+    result = train_and_evaluate(
+        dataset, args.horizon, seed=args.seed, train_frac=args.train_frac, val_frac=args.val_frac, embargo=args.embargo
+    )
+    data_info = {
+        "table_uri": uri,
+        "table_version": data_in.table_version,
+        "products": products,
+        "start": args.start.isoformat() if args.start else None,
+        "end": args.end.isoformat() if args.end else None,
+        "rows": len(dataset),
+    }
 
     run_id = None
     if not args.no_mlflow:
-        params = {"seed": args.seed, "train_frac": args.train_frac, "val_frac": args.val_frac,
-                  "embargo": args.embargo if args.embargo is not None else args.horizon}
-        run_id = log_training_run(result, data_info, params, dataset[result.feature_columns],
-                                  experiment=args.experiment)
+        params = {
+            "seed": args.seed,
+            "train_frac": args.train_frac,
+            "val_frac": args.val_frac,
+            "embargo": args.embargo if args.embargo is not None else args.horizon,
+        }
+        run_id = log_training_run(
+            result, data_info, params, dataset[result.feature_columns], experiment=args.experiment
+        )
     return result, data_info, run_id
 
 

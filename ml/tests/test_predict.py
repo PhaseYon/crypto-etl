@@ -49,8 +49,18 @@ def test_rerun_is_idempotent(trained):
 def test_new_minutes_are_appended(trained):
     gold, out, _ = trained
     _predict(gold, out, "--score-minutes", "2")
-    main(["--table-uri", gold, "--output-uri", out, "--as-of", (END - timedelta(minutes=10)).isoformat(),
-          "--score-minutes", "2"])
+    main(
+        [
+            "--table-uri",
+            gold,
+            "--output-uri",
+            out,
+            "--as-of",
+            (END - timedelta(minutes=10)).isoformat(),
+            "--score-minutes",
+            "2",
+        ]
+    )
     assert len(DeltaTable(out).to_pandas()) == 8
 
 
