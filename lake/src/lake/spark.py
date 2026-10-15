@@ -20,6 +20,11 @@ def spark_conf(config: LakeConfig, master: str = "local[*]") -> dict[str, str]:
         "spark.sql.catalog.spark_catalog": "org.apache.spark.sql.delta.catalog.DeltaCatalog",
         "spark.sql.session.timeZone": "UTC",
         "spark.sql.shuffle.partitions": str(config.shuffle_partitions),
+        # Size Delta log replay and file listing (used by VACUUM) for one node; the defaults
+        # (50 and 10000 tasks) are meant for clusters and dominate runtime in local mode
+        "spark.databricks.delta.snapshotPartitions": str(config.shuffle_partitions),
+        "spark.sql.sources.parallelPartitionDiscovery.parallelism": str(config.shuffle_partitions * 4),
+        "spark.ui.showConsoleProgress": "false",
         # Compact small files right after each write, inside the writing job (safe on S3,
         # unlike a second process committing to the same table)
         "spark.databricks.delta.autoCompact.enabled": "true",
