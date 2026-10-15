@@ -1,2 +1,144 @@
 # Services owned by the lake component. Included from the root docker-compose.yml.
-services: {}
+#
+# Object storage: RustFS, an Apache-2.0, S3-compatible server. MinIO stopped publishing
+# Docker images in 2025, so RustFS stands in for it locally. The service keeps the name
+# `minio` so S3_ENDPOINT=http://minio:9000 and the MINIO_* port variables stay valid.
+# In the cloud, drop this service and point S3_ENDPOINT/credentials at real S3.
+
+x-lake-env: &lake-env
+  KAFKA_BOOTSTRAP: kafka:29092
+  KAFKA_TOPIC: ${KAFKA_TOPIC:-raw.trades}
+  LAKE_BUCKET: ${LAKE_BUCKET:-crypto-lake}
+  S3_ENDPOINT: ${S3_ENDPOINT-http://minio:9000}
+  AWS_REGION: ${AWS_REGION:-us-east-1}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+
+# Common settings for every Spark job container. Each job runs Spark in local mode with a
+# small driver; three streaming jobs plus Kafka and the object store need ~6 GB of RAM,
+# so give WSL at least 8 GB (.wslconfig) if you run everything at once.
+x-lake-job: &lake-job
+  image: crypto-etl/lake:latest
+  build:
+    context: .
+    target: runtime
+  init: true  # forward SIGTERM to the job and reap the Spark JVM
+  environment:
+    <<: *lake-env
+    SPARK_MASTER: local[2]
+    SPARK_DRIVER_MEMORY: ${LAKE_DRIVER_MEMORY:-768m}
+  mem_limit: ${LAKE_JOB_MEM_LIMIT:-1280m}
+
+# Streaming jobs stay up and restart on failure; they resume from their checkpoints.
+x-lake-streaming: &lake-streaming
+  <<: *lake-job
+  restart: unless-stopped
+  stop_grace_period: 60s  # time to stop the query cleanly on `docker compose stop`
+  depends_on:
+    lake-init:
+      condition: service_completed_successfully
+    kafka-init:
+      condition: service_completed_successfully
+
+services:
+  minio:
+    image: rustfs/rustfs:1.0.1
+    command: ["rustfs"]
+    ports:
+      - "${MINIO_API_HOST_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
+    environment:
+      RUSTFS_ACCESS_KEY: ${AWS_ACCESS_KEY_ID:?set AWS_ACCESS_KEY_ID in .env}
+      RUSTFS_SECRET_KEY: ${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY in .env}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+    volumes:
+      - lake-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/health >/dev/null || wget -q -O /dev/null http://localhost:9000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # One-shot job: creates the lake bucket (idempotent), then exits
+  minio-init:
+    image: amazon/aws-cli:2.38.1
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_REGION:-us-east-1}
+      LAKE_BUCKET: ${LAKE_BUCKET:-crypto-lake}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        if aws --endpoint-url http://minio:9000 s3api head-bucket --bucket "$$LAKE_BUCKET" 2>/dev/null; then
+          echo "bucket $$LAKE_BUCKET already exists"
+        else
+          aws --endpoint-url http://minio:9000 s3api create-bucket --bucket "$$LAKE_BUCKET"
+          echo "created bucket $$LAKE_BUCKET"
+        fi
+
+  # One-shot job: creates all lake tables (idempotent) before the streaming jobs start
+  lake-init:
+    <<: *lake-job
+    command: ["lake.jobs.init_tables"]
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+
+  lake-bronze:
+    <<: *lake-streaming
+    command: ["lake.jobs.bronze"]
+
+  lake-silver:
+    <<: *lake-streaming
+    command: ["lake.jobs.silver"]
+
+  lake-gold:
+    <<: *lake-streaming
+    command: ["lake.jobs.gold"]
+
+  # Batch jobs, run on demand:
+  #   docker compose run --rm lake-trade-gaps > gaps.jsonl   (JSON lines on stdout, logs on stderr)
+  #   lake/scripts/maintenance.sh                            (stops writers, OPTIMIZE + VACUUM, restarts)
+  lake-trade-gaps:
+    <<: *lake-job
+    profiles: ["batch"]
+    command: ["lake.jobs.trade_gaps", "--lookback-hours", "${GAPS_LOOKBACK_HOURS:-24}"]
+    depends_on:
+      lake-init:
+        condition: service_completed_successfully
+
+  lake-maintenance:
+    <<: *lake-job
+    profiles: ["batch"]
+    command: ["lake.jobs.maintenance", "--retention-hours", "${VACUUM_RETENTION_HOURS:-168}"]
+    depends_on:
+      lake-init:
+        condition: service_completed_successfully
+
+  # Test runner (lake/scripts/test.sh). Sources are mounted so edits need no rebuild.
+  lake-tests:
+    image: crypto-etl/lake-test:latest
+    build:
+      context: .
+      target: test
+    profiles: ["test"]
+    environment:
+      <<: *lake-env
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - ./src:/opt/lake/app/src:ro
+      - ./tests:/opt/lake/app/tests:ro
+      - ./pytest.ini:/opt/lake/app/pytest.ini:ro
+    mem_limit: 3g
+
+volumes:
+  lake-data:

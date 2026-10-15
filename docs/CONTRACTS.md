@@ -103,6 +103,13 @@ backfill corrects candles instead of being dropped. Minutes with no trades have 
 ### `ops/trade_gaps` (data quality)
 `product_id`, `gap_start_id`, `gap_end_id` (inclusive), `missing_count`, `detected_at`.
 Missing `trade_id` ranges found in `silver/trades`. Feed for the producer's backfill CLI.
+The table holds the current gaps only (overwritten each run; Delta time travel keeps history).
+
+Export format (`docker compose --profile batch run --rm lake-trade-gaps > gaps.jsonl`, or
+`--export <file>`): JSON lines, one gap per line, inclusive bounds:
+```json
+{"product_id": "BTC-USD", "gap_start_id": 101, "gap_end_id": 179, "missing_count": 79}
+```
 
 ## ML
 

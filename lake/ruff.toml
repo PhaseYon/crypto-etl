@@ -1,0 +1,3 @@
+# The Spark image runs Python 3.10, so lint for that target.
+extend = "../pyproject.toml"
+target-version = "py310"
