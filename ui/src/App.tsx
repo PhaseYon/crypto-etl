@@ -2,13 +2,17 @@ import { useEffect, useState, type ComponentType } from "react";
 
 import { useMeta } from "./api/queries";
 import { useThemePreference, type ThemePreference } from "./lib/theme";
+import { MarketView } from "./views/market/MarketView";
 import { PipelineView } from "./views/pipeline/PipelineView";
 
 type TabId = string;
 
 type Tab = { id: TabId; label: string; view: ComponentType };
 
-const TABS: Tab[] = [{ id: "pipeline", label: "Pipeline", view: PipelineView }];
+const TABS: Tab[] = [
+  { id: "pipeline", label: "Pipeline", view: PipelineView },
+  { id: "market", label: "Market", view: MarketView },
+];
 
 function tabFromHash(hash: string): TabId {
   const id = hash.replace(/^#\/?/, "");
