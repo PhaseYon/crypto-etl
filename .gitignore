@@ -222,3 +222,4 @@ mlruns/
 spark-warehouse/
 metastore_db/
 .lake-local/
+.claude/worktrees/
