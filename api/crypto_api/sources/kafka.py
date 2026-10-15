@@ -8,6 +8,10 @@ from confluent_kafka.admin import AdminClient, ConfigResource, ResourceType
 from .base import PartitionWatermarks
 
 
+class TopicUnavailableError(KafkaException):
+    """The topic doesn't exist (yet) or its metadata reports an error."""
+
+
 class KafkaMetadataSource:
     def __init__(self, bootstrap: str, topic: str, timeout_seconds: float):
         self._topic = topic
@@ -29,7 +33,8 @@ class KafkaMetadataSource:
             metadata = self._consumer.list_topics(self._topic, timeout=self._timeout)
             topic = metadata.topics.get(self._topic)
             if topic is None or topic.error is not None:
-                raise KafkaException(topic.error if topic else f"topic {self._topic} not found")
+                reason = topic.error.str() if topic is not None and topic.error is not None else "not found"
+                raise TopicUnavailableError(f"topic {self._topic!r} not available: {reason}")
             result = []
             for partition in sorted(topic.partitions):
                 low, high = self._consumer.get_watermark_offsets(
