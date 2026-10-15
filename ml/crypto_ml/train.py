@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from crypto_ml.config import GOLD_OHLCV_PATH, StorageConfig
 from crypto_ml.data import read_ohlcv
 from crypto_ml.dataset import build_dataset
+from crypto_ml.tracking import DEFAULT_EXPERIMENT, log_training_run
 from crypto_ml.training import TrainResult, train_and_evaluate
 
 log = logging.getLogger("crypto_ml.train")
@@ -35,6 +36,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--table-uri", help=f"gold table (default: s3://$LAKE_BUCKET/{GOLD_OHLCV_PATH})")
     p.add_argument("--table-version", type=int, help="Delta version to read (default: latest)")
+    p.add_argument("--experiment", default=DEFAULT_EXPERIMENT, help="MLflow experiment name")
+    p.add_argument("--no-mlflow", action="store_true", help="Skip experiment tracking")
     return p
 
 
@@ -47,7 +50,7 @@ def summary_table(result: TrainResult) -> str:
     return "\n".join(lines)
 
 
-def run(args: argparse.Namespace) -> tuple[TrainResult, dict]:
+def run(args: argparse.Namespace) -> tuple[TrainResult, dict, str | None]:
     uri = args.table_uri or StorageConfig.from_env().table_uri(GOLD_OHLCV_PATH)
     products = [p.strip() for p in args.products.split(",") if p.strip()]
     data_in = read_ohlcv(uri, products=products, start=args.start, end=args.end, version=args.table_version)
@@ -61,14 +64,23 @@ def run(args: argparse.Namespace) -> tuple[TrainResult, dict]:
     data_info = {"table_uri": uri, "table_version": data_in.table_version, "products": products,
                  "start": args.start.isoformat() if args.start else None,
                  "end": args.end.isoformat() if args.end else None, "rows": len(dataset)}
-    return result, data_info
+
+    run_id = None
+    if not args.no_mlflow:
+        params = {"seed": args.seed, "train_frac": args.train_frac, "val_frac": args.val_frac,
+                  "embargo": args.embargo if args.embargo is not None else args.horizon}
+        run_id = log_training_run(result, data_info, params, dataset[result.feature_columns],
+                                  experiment=args.experiment)
+    return result, data_info, run_id
 
 
 def main(argv: list[str] | None = None) -> TrainResult:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     args = build_parser().parse_args(argv)
-    result, data_info = run(args)
+    result, data_info, run_id = run(args)
     log.info("data: %s", json.dumps(data_info))
+    if run_id:
+        log.info("logged MLflow run %s in experiment '%s'", run_id, args.experiment)
     log.info("best iteration %d, splits %s", result.best_iteration, result.split_sizes)
     print(summary_table(result))
     return result
