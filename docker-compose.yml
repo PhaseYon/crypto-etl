@@ -4,6 +4,7 @@ include:
   - producer/compose.yml
   - lake/compose.yml
   - ml/compose.yml
+  - ui/compose.yml
 
 services:
   kafka:
@@ -33,7 +34,8 @@ services:
     volumes:
       - kafka-data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      # Internal listener: the external one advertises localhost:${KAFKA_HOST_PORT}, unreachable from inside
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:29092 --list"]
       interval: 10s
       timeout: 10s
       retries: 10
