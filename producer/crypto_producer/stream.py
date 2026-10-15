@@ -65,7 +65,10 @@ class TradeStream:
         backoff = 1.0
         while True:
             try:
-                async with websockets.connect(self.settings.ws_url, ping_interval=20, open_timeout=10) as ws:
+                # close_timeout: on shutdown, don't spend the stop budget waiting for the server's close ack
+                async with websockets.connect(
+                    self.settings.ws_url, ping_interval=20, open_timeout=10, close_timeout=1
+                ) as ws:
                     # Coinbase drops connections that don't subscribe within ~5s
                     await ws.send(subscribe)
                     log.info("connected, subscribed to %s", list(self.settings.products))
