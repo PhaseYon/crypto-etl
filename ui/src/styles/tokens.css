@@ -1,0 +1,88 @@
+/* Design tokens. Values come from the dataviz reference palette: light and dark are each
+   selected and validated for their own surface, not an automatic flip. */
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface-1: #fcfcfb;
+  --surface-2: #f3f2ee;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.1);
+  --focus: #2a78d6;
+
+  /* Categorical slots, fixed order (identity) */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+
+  /* Diverging poles (polarity): price up / price down */
+  --up: #2a78d6;
+  --down: #e34948;
+  --volume: #c3c2b7;
+
+  /* Status: reserved, always paired with an icon and label */
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-critical: #d03b3b;
+  --status-neutral: #898781;
+  --status-good-text: #006300;
+  --status-warning-text: #7a5400;
+  --status-critical-text: #b02a2a;
+
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(11, 11, 11, 0.05);
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface-1: #1a1a19;
+    --surface-2: #232322;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.1);
+    --focus: #3987e5;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --up: #3987e5;
+    --down: #e66767;
+    --volume: #4a4a46;
+    --status-good-text: #0ca30c;
+    --status-warning-text: #fab219;
+    --status-critical-text: #e66767;
+    --shadow: none;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface-1: #1a1a19;
+  --surface-2: #232322;
+  --text-primary: #f0efec;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255, 255, 255, 0.1);
+  --focus: #3987e5;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --up: #3987e5;
+  --down: #e66767;
+  --volume: #4a4a46;
+  --status-good-text: #0ca30c;
+  --status-warning-text: #fab219;
+  --status-critical-text: #e66767;
+  --shadow: none;
+}

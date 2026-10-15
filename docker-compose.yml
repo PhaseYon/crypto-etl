@@ -4,6 +4,7 @@ include:
   - producer/compose.yml
   - lake/compose.yml
   - ml/compose.yml
+  - ui/compose.yml
 
 services:
   kafka:

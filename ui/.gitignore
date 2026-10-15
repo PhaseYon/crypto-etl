@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.npm-cache/
+coverage/
+test-results/
+playwright-report/
+*.tsbuildinfo
+
+# The root (Python) .gitignore ignores lib/; this is source code
+!src/lib/

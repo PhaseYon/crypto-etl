@@ -1,0 +1,75 @@
+# Pipeline dashboard: read-only API + static UI. Included from the root docker-compose.yml.
+#   docker compose up -d dashboard          → http://localhost:${DASHBOARD_HOST_PORT:-3000}
+#   DASHBOARD_DATA_SOURCE=mock docker compose up -d dashboard   (demo data, no lake needed)
+services:
+  dashboard-api:
+    build: ../api
+    image: crypto-etl/dashboard-api:dev
+    environment:
+      DATA_SOURCE: ${DASHBOARD_DATA_SOURCE:-real}
+      KAFKA_BOOTSTRAP: kafka:29092
+      KAFKA_TOPIC: ${KAFKA_TOPIC:-raw.trades}
+      LAKE_BUCKET: ${LAKE_BUCKET:-crypto-lake}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      PRODUCTS: ${PRODUCTS:-BTC-USD,ETH-USD,SOL-USD}
+    # Only Kafka is required: lake sources that don't exist yet are reported as down, not fatal
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      # Exposed on localhost for the Vite dev server's proxy; the UI container reaches it internally
+      - "127.0.0.1:${DASHBOARD_API_HOST_PORT:-8000}:8000"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 512m
+
+  dashboard:
+    build: .
+    image: crypto-etl/dashboard:dev
+    environment:
+      API_UPSTREAM: http://dashboard-api:8000
+    depends_on:
+      dashboard-api:
+        condition: service_started
+    ports:
+      - "${DASHBOARD_HOST_PORT:-3000}:8080"
+    restart: unless-stopped
+    mem_limit: 128m
+
+  # ---- test-only: a throwaway S3 store for the API's integration tests (profile "ui-test") ----
+  ui-test-s3:
+    profiles: ["ui-test"]
+    image: rustfs/rustfs:1.0.1
+    environment:
+      RUSTFS_ACCESS_KEY: uitestadmin
+      RUSTFS_SECRET_KEY: uitestsecret123
+    ports:
+      - "127.0.0.1:${UI_TEST_S3_PORT:-39000}:9000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://127.0.0.1:9000/health || wget -q -O /dev/null http://127.0.0.1:9000/health",
+        ]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  ui-test-s3-init:
+    profiles: ["ui-test"]
+    image: amazon/aws-cli:2.38.1
+    depends_on:
+      ui-test-s3:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: uitestadmin
+      AWS_SECRET_ACCESS_KEY: uitestsecret123
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - aws --endpoint-url http://ui-test-s3:9000 s3 mb s3://ui-test-lake || aws --endpoint-url http://ui-test-s3:9000 s3 ls s3://ui-test-lake
