@@ -33,7 +33,8 @@ services:
     volumes:
       - kafka-data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      # Use the INTERNAL listener: EXTERNAL advertises localhost:${KAFKA_HOST_PORT}, unreachable from inside
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --list"]
       interval: 10s
       timeout: 10s
       retries: 10

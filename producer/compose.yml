@@ -1,2 +1,24 @@
 # Services owned by the producer component. Included from the root docker-compose.yml.
-services: {}
+services:
+  producer:
+    build: .
+    image: crypto-etl/producer:latest
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      KAFKA_BOOTSTRAP: kafka:29092
+      KAFKA_TOPIC: ${KAFKA_TOPIC:-raw.trades}
+      PRODUCTS: ${PRODUCTS:-BTC-USD,ETH-USD,SOL-USD}
+      MAX_BACKFILL_TRADES: ${MAX_BACKFILL_TRADES:-100000}
+      SHUTDOWN_BACKFILL_TIMEOUT: "5"
+      SHUTDOWN_FLUSH_TIMEOUT: "10"
+      LOG_LEVEL: ${PRODUCER_LOG_LEVEL:-INFO}
+    restart: unless-stopped
+    # Must exceed SHUTDOWN_BACKFILL_TIMEOUT + SHUTDOWN_FLUSH_TIMEOUT, or Docker SIGKILLs mid-flush
+    stop_grace_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

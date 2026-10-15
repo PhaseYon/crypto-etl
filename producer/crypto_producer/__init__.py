@@ -1,0 +1,1 @@
+"""Coinbase trades -> Kafka producer."""
