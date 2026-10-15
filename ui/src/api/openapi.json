@@ -1,0 +1,1280 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "crypto-etl dashboard API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/livez": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Livez",
+        "description": "Liveness only: the API process is up. Source health is reported by /api/pipeline.",
+        "operationId": "livez_api_livez_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LivenessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meta": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Meta",
+        "operationId": "meta_api_meta_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetaResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Pipeline",
+        "operationId": "pipeline_api_pipeline_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market/ohlcv": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Ohlcv",
+        "operationId": "ohlcv_api_market_ohlcv_get",
+        "parameters": [
+          {
+            "name": "product",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Product id, e.g. BTC-USD",
+              "title": "Product"
+            },
+            "description": "Product id, e.g. BTC-USD"
+          },
+          {
+            "name": "minutes",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10080,
+              "minimum": 15,
+              "description": "Look-back window",
+              "default": 360,
+              "title": "Minutes"
+            },
+            "description": "Look-back window"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/quality": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Quality",
+        "operationId": "quality_api_quality_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QualityResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ml/predictions": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Predictions",
+        "operationId": "predictions_api_ml_predictions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictionsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BackfillShare": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "stale",
+              "down",
+              "inactive"
+            ],
+            "title": "Status"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "lookback_days": {
+            "type": "integer",
+            "title": "Lookback Days"
+          },
+          "total_rows": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Rows"
+          },
+          "backfilled_rows": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backfilled Rows"
+          },
+          "share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "error",
+          "lookback_days",
+          "total_rows",
+          "backfilled_rows",
+          "share"
+        ],
+        "title": "BackfillShare"
+      },
+      "Candle": {
+        "properties": {
+          "time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Time"
+          },
+          "open": {
+            "type": "number",
+            "title": "Open"
+          },
+          "high": {
+            "type": "number",
+            "title": "High"
+          },
+          "low": {
+            "type": "number",
+            "title": "Low"
+          },
+          "close": {
+            "type": "number",
+            "title": "Close"
+          },
+          "volume": {
+            "type": "number",
+            "title": "Volume"
+          },
+          "vwap": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vwap"
+          },
+          "trade_count": {
+            "type": "integer",
+            "title": "Trade Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "time",
+          "open",
+          "high",
+          "low",
+          "close",
+          "volume",
+          "vwap",
+          "trade_count"
+        ],
+        "title": "Candle"
+      },
+      "GapsSummary": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "stale",
+              "down",
+              "inactive"
+            ],
+            "title": "Status"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "detected_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detected At",
+            "description": "Time of the latest data-quality scan shown"
+          },
+          "gaps": {
+            "items": {
+              "$ref": "#/components/schemas/TradeGap"
+            },
+            "type": "array",
+            "title": "Gaps"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "error",
+          "detected_at",
+          "gaps"
+        ],
+        "title": "GapsSummary"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "KafkaDetail": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "stale",
+              "down",
+              "inactive"
+            ],
+            "title": "Status"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "topic": {
+            "type": "string",
+            "title": "Topic"
+          },
+          "partitions": {
+            "items": {
+              "$ref": "#/components/schemas/PartitionOffsets"
+            },
+            "type": "array",
+            "title": "Partitions"
+          },
+          "retained_messages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retained Messages"
+          },
+          "ingest_rate_per_second": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingest Rate Per Second",
+            "description": "From high-watermark deltas; null until two samples"
+          },
+          "retention_hours": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Hours"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "error",
+          "topic",
+          "partitions",
+          "retained_messages",
+          "ingest_rate_per_second",
+          "retention_hours"
+        ],
+        "title": "KafkaDetail"
+      },
+      "LagDetail": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "stale",
+              "down",
+              "inactive"
+            ],
+            "title": "Status"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "total_lag": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Lag"
+          },
+          "partitions": {
+            "items": {
+              "$ref": "#/components/schemas/PartitionLag"
+            },
+            "type": "array",
+            "title": "Partitions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "error",
+          "total_lag",
+          "partitions"
+        ],
+        "title": "LagDetail"
+      },
+      "LivenessResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "LivenessResponse"
+      },
+      "MarketResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "stale",
+              "down",
+              "inactive"
+            ],
+            "title": "Status"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "product_id": {
+            "type": "string",
+            "title": "Product Id"
+          },
+          "minutes": {
+            "type": "integer",
+            "title": "Minutes"
+          },
+          "candles": {
+            "items": {
+              "$ref": "#/components/schemas/Candle"
+            },
+            "type": "array",
+            "title": "Candles"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "error",
+          "product_id",
+          "minutes",
+          "candles"
+        ],
+        "title": "MarketResponse"
+      },
+      "MetaResponse": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "data_source": {
+            "type": "string",
+            "enum": [
+              "real",
+              "mock"
+            ],
+            "title": "Data Source"
+          },
+          "products": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Products"
+          },
+          "poll_interval_ms": {
+            "type": "integer",
+            "title": "Poll Interval Ms"
+          },
+          "thresholds": {
+            "$ref": "#/components/schemas/Thresholds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "data_source",
+          "products",
+          "poll_interval_ms",
+          "thresholds"
+        ],
+        "title": "MetaResponse"
+      },
+      "Metric": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value",
+            "description": "null when unknown"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "count",
+              "per_second",
+              "seconds",
+              "hours",
+              "ratio",
+              "version"
+            ],
+            "title": "Unit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "value",
+          "unit"
+        ],
+        "title": "Metric"
+      },
+      "PartitionLag": {
+        "properties": {
+          "partition": {
+            "type": "integer",
+            "title": "Partition"
+          },
+          "high_watermark": {
+            "type": "integer",
+            "title": "High Watermark"
+          },
+          "bronze_next_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bronze Next Offset",
+            "description": "max kafka_offset in bronze + 1; null if none ingested"
+          },
+          "lag": {
+            "type": "integer",
+            "title": "Lag"
+          }
+        },
+        "type": "object",
+        "required": [
+          "partition",
+          "high_watermark",
+          "bronze_next_offset",
+          "lag"
+        ],
+        "title": "PartitionLag"
+      },
+      "PartitionOffsets": {
+        "properties": {
+          "partition": {
+            "type": "integer",
+            "title": "Partition"
+          },
+          "low_watermark": {
+            "type": "integer",
+            "title": "Low Watermark"
+          },
+          "high_watermark": {
+            "type": "integer",
+            "title": "High Watermark"
+          }
+        },
+        "type": "object",
+        "required": [
+          "partition",
+          "low_watermark",
+          "high_watermark"
+        ],
+        "title": "PartitionOffsets"
+      },
+      "PipelineResponse": {
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/Stage"
+            },
+            "type": "array",
+            "title": "Stages"
+          },
+          "kafka": {
+            "$ref": "#/components/schemas/KafkaDetail"
+          },
+          "lag": {
+            "$ref": "#/components/schemas/LagDetail"
+          },
+          "tables": {
+            "items": {
+              "$ref": "#/components/schemas/TableStatus"
+            },
+            "type": "array",
+            "title": "Tables"
+          }
+        },
+        "type": "object",
+        "required": [
+          "generated_at",
+          "stages",
+          "kafka",
+          "lag",
+          "tables"
+        ],
+        "title": "PipelineResponse"
+      },
+      "Prediction": {
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "title": "Product Id"
+          },
+          "window_start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Start"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "window_start",
+          "score",
+          "model_version",
+          "created_at"
+        ],
+        "title": "Prediction"
+      },
+      "PredictionsResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "stale",
+              "down",
+              "inactive"
+            ],
+            "title": "Status"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "predictions": {
+            "items": {
+              "$ref": "#/components/schemas/Prediction"
+            },
+            "type": "array",
+            "title": "Predictions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "error",
+          "reason",
+          "predictions"
+        ],
+        "title": "PredictionsResponse"
+      },
+      "QualityResponse": {
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "quarantine": {
+            "$ref": "#/components/schemas/QuarantineSummary"
+          },
+          "gaps": {
+            "$ref": "#/components/schemas/GapsSummary"
+          },
+          "backfill": {
+            "$ref": "#/components/schemas/BackfillShare"
+          }
+        },
+        "type": "object",
+        "required": [
+          "generated_at",
+          "quarantine",
+          "gaps",
+          "backfill"
+        ],
+        "title": "QualityResponse"
+      },
+      "QuarantineReason": {
+        "properties": {
+          "error": {
+            "type": "string",
+            "title": "Error"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error",
+          "count"
+        ],
+        "title": "QuarantineReason"
+      },
+      "QuarantineRecord": {
+        "properties": {
+          "error": {
+            "type": "string",
+            "title": "Error"
+          },
+          "quarantined_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quarantined At"
+          },
+          "kafka_partition": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kafka Partition"
+          },
+          "kafka_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kafka Offset"
+          },
+          "value_preview": {
+            "type": "string",
+            "title": "Value Preview",
+            "description": "First characters of the raw value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error",
+          "quarantined_at",
+          "kafka_partition",
+          "kafka_offset",
+          "value_preview"
+        ],
+        "title": "QuarantineRecord"
+      },
+      "QuarantineSummary": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "stale",
+              "down",
+              "inactive"
+            ],
+            "title": "Status"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          },
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/QuarantineReason"
+            },
+            "type": "array",
+            "title": "Reasons"
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/QuarantineRecord"
+            },
+            "type": "array",
+            "title": "Recent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "error",
+          "total",
+          "reasons",
+          "recent"
+        ],
+        "title": "QuarantineSummary"
+      },
+      "Stage": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "coinbase",
+              "producer",
+              "kafka",
+              "bronze",
+              "silver",
+              "gold",
+              "ml"
+            ],
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "stale",
+              "down",
+              "inactive"
+            ],
+            "title": "Status"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "description": "Why the stage has this status; shown in the UI"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/Metric"
+            },
+            "type": "array",
+            "title": "Metrics"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "status",
+          "reason",
+          "metrics"
+        ],
+        "title": "Stage"
+      },
+      "TableStatus": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "bronze",
+              "silver",
+              "quarantine",
+              "gold",
+              "trade_gaps",
+              "predictions"
+            ],
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "stale",
+              "down",
+              "inactive"
+            ],
+            "title": "Status"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "exists": {
+            "type": "boolean",
+            "title": "Exists"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "last_commit_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Commit At"
+          },
+          "row_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Count"
+          },
+          "freshness_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Seconds",
+            "description": "now minus the newest event/ingest timestamp in the table"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "path",
+          "status",
+          "reason",
+          "exists",
+          "version",
+          "last_commit_at",
+          "row_count",
+          "freshness_seconds"
+        ],
+        "title": "TableStatus"
+      },
+      "Thresholds": {
+        "properties": {
+          "kafka_stale_seconds": {
+            "type": "number",
+            "title": "Kafka Stale Seconds"
+          },
+          "bronze_stale_seconds": {
+            "type": "number",
+            "title": "Bronze Stale Seconds"
+          },
+          "silver_stale_seconds": {
+            "type": "number",
+            "title": "Silver Stale Seconds"
+          },
+          "gold_stale_seconds": {
+            "type": "number",
+            "title": "Gold Stale Seconds"
+          },
+          "predictions_stale_seconds": {
+            "type": "number",
+            "title": "Predictions Stale Seconds"
+          },
+          "lag_stale_messages": {
+            "type": "integer",
+            "title": "Lag Stale Messages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kafka_stale_seconds",
+          "bronze_stale_seconds",
+          "silver_stale_seconds",
+          "gold_stale_seconds",
+          "predictions_stale_seconds",
+          "lag_stale_messages"
+        ],
+        "title": "Thresholds"
+      },
+      "TradeGap": {
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "title": "Product Id"
+          },
+          "gap_start_id": {
+            "type": "integer",
+            "title": "Gap Start Id"
+          },
+          "gap_end_id": {
+            "type": "integer",
+            "title": "Gap End Id"
+          },
+          "missing_count": {
+            "type": "integer",
+            "title": "Missing Count"
+          },
+          "detected_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detected At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "gap_start_id",
+          "gap_end_id",
+          "missing_count",
+          "detected_at"
+        ],
+        "title": "TradeGap"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
