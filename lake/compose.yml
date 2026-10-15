@@ -1,0 +1,2 @@
+# Services owned by the lake component. Included from the root docker-compose.yml.
+services: {}

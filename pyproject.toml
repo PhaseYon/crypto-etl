@@ -1,0 +1,13 @@
+# Shared tooling config. Runtime dependencies live per component (producer/, lake/, ml/).
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: needs Docker services (Kafka, MinIO) or network; run with -m integration",
+]
+addopts = "-m 'not integration'"

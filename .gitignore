@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project
+mlruns/
+spark-warehouse/
+metastore_db/
+.lake-local/
