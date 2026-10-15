@@ -5,6 +5,21 @@
 # `minio` so S3_ENDPOINT=http://minio:9000 and the MINIO_* port variables stay valid.
 # In the cloud, drop this service and point S3_ENDPOINT/credentials at real S3.
 
+x-lake-env: &lake-env
+  KAFKA_BOOTSTRAP: kafka:29092
+  KAFKA_TOPIC: ${KAFKA_TOPIC:-raw.trades}
+  LAKE_BUCKET: ${LAKE_BUCKET:-crypto-lake}
+  S3_ENDPOINT: ${S3_ENDPOINT-http://minio:9000}
+  AWS_REGION: ${AWS_REGION:-us-east-1}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+
+x-lake-image: &lake-image
+  image: crypto-etl/lake:latest
+  build:
+    context: .
+    target: runtime
+
 services:
   minio:
     image: rustfs/rustfs:1.0.1
@@ -49,6 +64,22 @@ services:
           aws --endpoint-url http://minio:9000 s3api create-bucket --bucket "$$LAKE_BUCKET"
           echo "created bucket $$LAKE_BUCKET"
         fi
+
+  # Test runner (lake/scripts/test.sh). Sources are mounted so edits need no rebuild.
+  lake-tests:
+    image: crypto-etl/lake-test:latest
+    build:
+      context: .
+      target: test
+    profiles: ["test"]
+    environment:
+      <<: *lake-env
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - ./src:/opt/lake/app/src:ro
+      - ./tests:/opt/lake/app/tests:ro
+      - ./pytest.ini:/opt/lake/app/pytest.ini:ro
+    mem_limit: 3g
 
 volumes:
   lake-data:
