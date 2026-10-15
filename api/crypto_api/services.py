@@ -268,9 +268,12 @@ class PipelineService:
         if table_id in thresholds:
             return freshness_verdict(age, thresholds[table_id])
         # Quarantine and gap tables are quality signals, not freshness-critical
-        rows = "unknown" if snap.row_count is None else f"{snap.row_count:,}"
+        if snap.row_count is None:
+            rows = "row count unknown"
+        else:
+            rows = f"{snap.row_count:,} row{'' if snap.row_count == 1 else 's'}"
         when = "" if age is None else f", newest {format_duration(age)} ago"
-        return Verdict("ok", f"{rows} rows{when}")
+        return Verdict("ok", f"{rows}{when}")
 
     def _stages(self, kafka: KafkaDetail, lag: LagDetail, tables: dict[str, TableStatus]) -> list[Stage]:
         def table_metrics(t: TableStatus) -> list[Metric]:

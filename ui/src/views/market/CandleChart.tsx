@@ -12,7 +12,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import type { Candle } from "../../api/types";
-import { formatCount, formatPrice } from "../../lib/format";
+import { formatPrice, formatVolume } from "../../lib/format";
 import { useChartColors } from "../../lib/theme";
 import { toCandleData, toVolumeData } from "./candles";
 
@@ -164,7 +164,7 @@ export function CandleChart({ candles, productId }: { candles: Candle[]; product
               C <strong>{formatPrice(readout.close)}</strong>
             </span>
             <span>
-              Vol <strong>{readout.volume === null ? "—" : formatCount(readout.volume)}</strong>
+              Vol <strong>{formatVolume(readout.volume)}</strong>
             </span>
           </>
         ) : null}

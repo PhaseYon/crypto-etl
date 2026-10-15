@@ -4,7 +4,7 @@ import { useMarket, useMeta } from "../../api/queries";
 import type { Candle, MarketResponse } from "../../api/types";
 import { Panel } from "../../components/Panel";
 import { StatTile } from "../../components/StatTile";
-import { formatCount, formatPrice, formatSignedPercent, formatTime } from "../../lib/format";
+import { formatCount, formatPrice, formatSignedPercent, formatTime, formatVolume } from "../../lib/format";
 import { CandleChart } from "./CandleChart";
 import { RANGES, summarize } from "./candles";
 
@@ -113,7 +113,7 @@ function MarketTiles({ candles, rangeLabel }: { candles: Candle[]; rangeLabel: s
       />
       <StatTile
         label={`Volume (${rangeLabel})`}
-        value={formatCount(s.volume)}
+        value={formatVolume(s.volume)}
         note={`${formatCount(s.trades)} trades`}
       />
     </div>
@@ -145,7 +145,7 @@ function CandleTable({ candles }: { candles: Candle[] }) {
               <td className="num">{formatPrice(c.high)}</td>
               <td className="num">{formatPrice(c.low)}</td>
               <td className="num">{formatPrice(c.close)}</td>
-              <td className="num">{formatCount(c.volume)}</td>
+              <td className="num">{formatVolume(c.volume)}</td>
               <td className="num">{formatPrice(c.vwap)}</td>
               <td className="num">{formatCount(c.trade_count)}</td>
             </tr>

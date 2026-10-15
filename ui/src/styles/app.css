@@ -321,6 +321,10 @@ a {
   border-top-color: var(--status-critical);
 }
 
+.stage .badge {
+  align-self: flex-start;
+}
+
 .stage-name {
   margin: 0;
   font-size: 0.92rem;
@@ -438,7 +442,7 @@ table.data code {
 .tiles {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
 }
 
 .tile {

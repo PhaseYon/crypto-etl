@@ -19,6 +19,7 @@ export function lightweightChartsMock() {
       subscribeCrosshairMove: vi.fn(),
       unsubscribeCrosshairMove: vi.fn(),
       timeScale: () => ({ fitContent: vi.fn() }),
+      removeSeries: vi.fn(),
       remove: vi.fn(),
     };
   });

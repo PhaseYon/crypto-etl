@@ -9,6 +9,13 @@ export function formatCount(value: number | null | undefined): string {
   return Math.abs(value) < 10_000 ? integer.format(value) : compact.format(value);
 }
 
+/** Trade volumes are often fractional (0.7356 BTC): keep 4 significant digits below 1,000. */
+export function formatVolume(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  if (Math.abs(value) >= 1000) return compact.format(value);
+  return value.toLocaleString("en-US", { maximumSignificantDigits: 4 });
+}
+
 export function formatRate(perSecond: number | null | undefined): string {
   if (perSecond === null || perSecond === undefined || !Number.isFinite(perSecond)) return "—";
   return `${perSecond < 10 ? perSecond.toFixed(1) : integer.format(perSecond)}/s`;

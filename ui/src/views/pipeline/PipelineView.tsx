@@ -29,7 +29,7 @@ export function PipelineView() {
           </>
         )}
       </Panel>
-      <div className="grid-2">
+      <div className="stack">
         <Panel
           title="Kafka → bronze"
           subtitle={query.data ? kafkaSubtitle(query.data) : undefined}

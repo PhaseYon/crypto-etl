@@ -3,6 +3,7 @@ import { useEffect, useState, type ComponentType } from "react";
 import { useMeta } from "./api/queries";
 import { useThemePreference, type ThemePreference } from "./lib/theme";
 import { MarketView } from "./views/market/MarketView";
+import { MlView } from "./views/ml/MlView";
 import { PipelineView } from "./views/pipeline/PipelineView";
 import { QualityView } from "./views/quality/QualityView";
 
@@ -14,6 +15,7 @@ const TABS: Tab[] = [
   { id: "pipeline", label: "Pipeline", view: PipelineView },
   { id: "market", label: "Market", view: MarketView },
   { id: "quality", label: "Data quality", view: QualityView },
+  { id: "ml", label: "ML", view: MlView },
 ];
 
 function tabFromHash(hash: string): TabId {

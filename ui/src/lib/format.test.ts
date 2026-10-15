@@ -10,6 +10,7 @@ import {
   formatRate,
   formatSignedPercent,
   formatTime,
+  formatVolume,
 } from "./format";
 
 describe("formatCount", () => {
@@ -52,6 +53,13 @@ describe("number formats", () => {
     expect(formatSignedPercent(0.0123)).toBe("+1.23%");
     expect(formatSignedPercent(-0.0123)).toBe("−1.23%");
     expect(formatSignedPercent(0)).toBe("0.00%");
+  });
+
+  it("volume keeps fractional precision", () => {
+    expect(formatVolume(0.73559)).toBe("0.7356");
+    expect(formatVolume(174.44)).toBe("174.4");
+    expect(formatVolume(12_900)).toBe("12.9K");
+    expect(formatVolume(null)).toBe("—");
   });
 
   it("price precision follows magnitude", () => {
