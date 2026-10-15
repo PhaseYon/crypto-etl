@@ -21,6 +21,19 @@ from confluent_kafka.admin import AdminClient, NewTopic
 KAFKA_TEST_BOOTSTRAP = os.getenv("KAFKA_TEST_BOOTSTRAP", "localhost:9092")
 
 
+@pytest.fixture(autouse=True)
+def no_real_kafka_in_unit_tests(request, monkeypatch):
+    """Unit tests must never reach a real broker: default settings point at the main stack's raw.trades."""
+    if request.node.get_closest_marker("integration"):
+        return
+
+    def refuse(*args, **kwargs):
+        raise RuntimeError("unit test tried to create a real Kafka producer; inject a fake instead")
+
+    for module in ("crypto_producer.kafka_io", "crypto_producer.backfill", "crypto_producer.app"):
+        monkeypatch.setattr(f"{module}.make_producer", refuse)
+
+
 @pytest.fixture(scope="session")
 def kafka_bootstrap() -> str:
     admin = AdminClient({"bootstrap.servers": KAFKA_TEST_BOOTSTRAP})

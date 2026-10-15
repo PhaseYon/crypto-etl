@@ -1,7 +1,10 @@
 """End-to-end: the real producer process, a real Kafka, and a fake Coinbase (offline, deterministic)."""
 
+import os
 import re
 import signal
+import subprocess
+import sys
 
 import pytest
 from conftest import read_topic, wait_for
@@ -85,6 +88,24 @@ def test_shutdown_waits_for_backfill_then_reports_what_was_cut_off(kafka_bootstr
     # Everything except the reported range made it to Kafka: the log is an exact to-do list
     assert first_missing == 101
     assert ids == [100, *range(last_missing + 1, 5102)]
+
+
+def test_backfill_cli_fills_ranges_from_a_gaps_file(kafka_bootstrap, topic, tmp_path):
+    gaps = tmp_path / "trade_gaps.csv"
+    gaps.write_text("product_id,gap_start_id,gap_end_id,missing_count\nBTC-USD,101,1600,1500\nETH-USD,7,9,3\n")
+    with FakeCoinbase() as fake:
+        result = subprocess.run(
+            [sys.executable, "-m", "crypto_producer.backfill", "--gaps-file", str(gaps)],
+            env={**os.environ, **env_for(fake, kafka_bootstrap, topic)},
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    assert result.returncode == 0, result.stderr
+    assert ids_by_product(read_topic(kafka_bootstrap, topic)) == {
+        "BTC-USD": list(range(101, 1601)),
+        "ETH-USD": [7, 8, 9],
+    }
 
 
 def test_kafka_down_at_startup_does_not_crash(run_producer):
