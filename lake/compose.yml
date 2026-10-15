@@ -1,2 +1,54 @@
 # Services owned by the lake component. Included from the root docker-compose.yml.
-services: {}
+#
+# Object storage: RustFS, an Apache-2.0, S3-compatible server. MinIO stopped publishing
+# Docker images in 2025, so RustFS stands in for it locally. The service keeps the name
+# `minio` so S3_ENDPOINT=http://minio:9000 and the MINIO_* port variables stay valid.
+# In the cloud, drop this service and point S3_ENDPOINT/credentials at real S3.
+
+services:
+  minio:
+    image: rustfs/rustfs:1.0.1
+    command: ["rustfs"]
+    ports:
+      - "${MINIO_API_HOST_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
+    environment:
+      RUSTFS_ACCESS_KEY: ${AWS_ACCESS_KEY_ID:?set AWS_ACCESS_KEY_ID in .env}
+      RUSTFS_SECRET_KEY: ${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY in .env}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+    volumes:
+      - lake-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/health >/dev/null || wget -q -O /dev/null http://localhost:9000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # One-shot job: creates the lake bucket (idempotent), then exits
+  minio-init:
+    image: amazon/aws-cli:2.38.1
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_REGION:-us-east-1}
+      LAKE_BUCKET: ${LAKE_BUCKET:-crypto-lake}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        if aws --endpoint-url http://minio:9000 s3api head-bucket --bucket "$$LAKE_BUCKET" 2>/dev/null; then
+          echo "bucket $$LAKE_BUCKET already exists"
+        else
+          aws --endpoint-url http://minio:9000 s3api create-bucket --bucket "$$LAKE_BUCKET"
+          echo "created bucket $$LAKE_BUCKET"
+        fi
+
+volumes:
+  lake-data:
