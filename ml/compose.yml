@@ -1,2 +1,45 @@
 # Services owned by the ml component. Included from the root docker-compose.yml.
-services: {}
+# Run-on-demand jobs (profile "ml"), not long-running services:
+#   docker compose --profile ml run --rm ml-train
+#   docker compose --profile ml run --rm ml-predict
+# Both read gold/ohlcv_1m from the lake (S3_ENDPOINT etc. from .env) and share
+# the MLflow tracking DB and model artifacts on the ml-data volume.
+
+x-ml-job: &ml-job
+  build:
+    context: .
+  image: crypto-etl-ml:latest
+  profiles: ["ml"]
+  env_file:
+    - path: ../.env
+      required: false
+  environment:
+    LAKE_BUCKET: ${LAKE_BUCKET:-crypto-lake}
+    S3_ENDPOINT: ${S3_ENDPOINT-http://minio:9000}
+    AWS_REGION: ${AWS_REGION:-us-east-1}
+    # Inside the container the tracking store is on the volume, whatever .env says for the host
+    MLFLOW_TRACKING_URI: sqlite:////data/mlruns/mlflow.db
+    MLFLOW_ARTIFACT_ROOT: /data/mlruns/artifacts
+  volumes:
+    - ml-data:/data
+  restart: "no"
+
+services:
+  ml-train:
+    <<: *ml-job
+    command:
+      - crypto_ml.train
+      - --products
+      - ${ML_PRODUCTS:-BTC-USD,ETH-USD,SOL-USD}
+      - --horizon
+      - ${ML_HORIZON:-5}
+
+  ml-predict:
+    <<: *ml-job
+    command:
+      - crypto_ml.predict
+      - --score-minutes
+      - ${ML_SCORE_MINUTES:-1}
+
+volumes:
+  ml-data:
