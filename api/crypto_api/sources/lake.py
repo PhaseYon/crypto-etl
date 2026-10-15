@@ -22,7 +22,7 @@ from .base import (
 )
 
 VALUE_PREVIEW_CHARS = 300
-# Rows of one data-quality scan share (roughly) one detected_at; see docs proposal in ui/README.md
+# Rows of one data-quality scan share (roughly) one detected_at; see "Assumptions" in ui/README.md
 GAP_SCAN_WINDOW_SECONDS = 60
 
 
