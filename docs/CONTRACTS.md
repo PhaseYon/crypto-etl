@@ -114,4 +114,20 @@ Export format (`docker compose --profile batch run --rm lake-trade-gaps > gaps.j
 ## ML
 
 Reads `gold/ohlcv_1m` only. Owns feature engineering, labels, training and model artifacts.
-Experiments are tracked with MLflow (`MLFLOW_TRACKING_URI`).
+Experiments are tracked with MLflow (`MLFLOW_TRACKING_URI`, a SQLite database by default; MLflow 3.x
+no longer accepts the plain file store).
+
+### `ml/predictions`
+| Column | Type | Notes |
+|---|---|---|
+| `product_id` | string | |
+| `window_start` | timestamp | minute the features describe (UTC) |
+| `horizon_minutes` | long | the prediction is for `window_start + horizon` |
+| `model_run_id` | string | MLflow run id |
+| `p_up` | double | P(forward log return > 0) |
+| `predicted_label` | long | `p_up > 0.5` |
+| `is_filled` | long | 1 if that minute had no trades (features from carried-forward prices) |
+| `created_at` | timestamp | |
+| `prediction_date` | date | partition column |
+
+Unique key: `(product_id, window_start, model_run_id)`, enforced by MERGE.
