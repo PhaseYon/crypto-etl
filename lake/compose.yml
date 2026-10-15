@@ -14,11 +14,31 @@ x-lake-env: &lake-env
   AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
   AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
 
-x-lake-image: &lake-image
+# Common settings for every Spark job container. Each job runs Spark in local mode with a
+# small driver; three streaming jobs plus Kafka and the object store need ~6 GB of RAM,
+# so give WSL at least 8 GB (.wslconfig) if you run everything at once.
+x-lake-job: &lake-job
   image: crypto-etl/lake:latest
   build:
     context: .
     target: runtime
+  init: true  # forward SIGTERM to the job and reap the Spark JVM
+  environment:
+    <<: *lake-env
+    SPARK_MASTER: local[2]
+    SPARK_DRIVER_MEMORY: ${LAKE_DRIVER_MEMORY:-768m}
+  mem_limit: ${LAKE_JOB_MEM_LIMIT:-1280m}
+
+# Streaming jobs stay up and restart on failure; they resume from their checkpoints.
+x-lake-streaming: &lake-streaming
+  <<: *lake-job
+  restart: unless-stopped
+  stop_grace_period: 60s  # time to stop the query cleanly on `docker compose stop`
+  depends_on:
+    lake-init:
+      condition: service_completed_successfully
+    kafka-init:
+      condition: service_completed_successfully
 
 services:
   minio:
@@ -64,6 +84,45 @@ services:
           aws --endpoint-url http://minio:9000 s3api create-bucket --bucket "$$LAKE_BUCKET"
           echo "created bucket $$LAKE_BUCKET"
         fi
+
+  # One-shot job: creates all lake tables (idempotent) before the streaming jobs start
+  lake-init:
+    <<: *lake-job
+    command: ["lake.jobs.init_tables"]
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+
+  lake-bronze:
+    <<: *lake-streaming
+    command: ["lake.jobs.bronze"]
+
+  lake-silver:
+    <<: *lake-streaming
+    command: ["lake.jobs.silver"]
+
+  lake-gold:
+    <<: *lake-streaming
+    command: ["lake.jobs.gold"]
+
+  # Batch jobs, run on demand:
+  #   docker compose run --rm lake-trade-gaps > gaps.jsonl   (JSON lines on stdout, logs on stderr)
+  #   lake/scripts/maintenance.sh                            (stops writers, OPTIMIZE + VACUUM, restarts)
+  lake-trade-gaps:
+    <<: *lake-job
+    profiles: ["batch"]
+    command: ["lake.jobs.trade_gaps", "--lookback-hours", "${GAPS_LOOKBACK_HOURS:-24}"]
+    depends_on:
+      lake-init:
+        condition: service_completed_successfully
+
+  lake-maintenance:
+    <<: *lake-job
+    profiles: ["batch"]
+    command: ["lake.jobs.maintenance", "--retention-hours", "${VACUUM_RETENTION_HOURS:-168}"]
+    depends_on:
+      lake-init:
+        condition: service_completed_successfully
 
   # Test runner (lake/scripts/test.sh). Sources are mounted so edits need no rebuild.
   lake-tests:

@@ -31,7 +31,7 @@ def run_streaming(name: str, start: StartFn, trigger_interval: Callable[[LakeCon
     """
     configure_logging()
     config = LakeConfig.from_env()
-    spark = build_spark(name, config)
+    spark = build_spark(name, config, master=config.spark_master)
     query = start(spark, config, {"processingTime": trigger_interval(config)})
     log.info("%s started (id=%s, trigger=%s)", name, query.id, trigger_interval(config))
 

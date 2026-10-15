@@ -29,6 +29,7 @@ class LakeConfig:
     fail_on_data_loss: bool
     shuffle_partitions: int
     driver_memory: str
+    spark_master: str
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> LakeConfig:
@@ -49,6 +50,7 @@ class LakeConfig:
             fail_on_data_loss=_bool(env.get("FAIL_ON_DATA_LOSS", "true")),
             shuffle_partitions=int(env.get("SPARK_SHUFFLE_PARTITIONS", "8")),
             driver_memory=env.get("SPARK_DRIVER_MEMORY", "1g"),
+            spark_master=env.get("SPARK_MASTER", "local[*]"),
         )
 
     def path(self, relative: str) -> str:

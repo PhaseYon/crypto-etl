@@ -91,7 +91,7 @@ def main(argv: list[str] | None = None) -> int:
 
     configure_logging()
     config = LakeConfig.from_env()
-    spark = build_spark(NAME, config)
+    spark = build_spark(NAME, config, master=config.spark_master)
     try:
         now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
         return run(spark, config, args.lookback_hours, now, args.export, args.fail_on_gaps)

@@ -65,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
 
     configure_logging()
     config = LakeConfig.from_env()
-    spark = build_spark(NAME, config)
+    spark = build_spark(NAME, config, master=config.spark_master)
     try:
         maintain(spark, config, args.retention_hours, vacuum=not args.skip_vacuum)
     finally:
