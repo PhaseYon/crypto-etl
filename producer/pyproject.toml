@@ -7,7 +7,7 @@ name = "crypto-producer"
 version = "0.1.0"
 description = "Streams Coinbase trades into Kafka, with gap backfill"
 requires-python = ">=3.12"
-dependencies = ["confluent-kafka==2.15.1", "websockets==17.1"]
+dependencies = ["confluent-kafka==2.16.0", "websockets==17.1"]
 
 [tool.setuptools]
 packages = ["crypto_producer"]

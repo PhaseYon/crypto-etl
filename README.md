@@ -60,6 +60,18 @@ All configuration is environment variables; [`.env.example`](.env.example) lists
 Coinbase market data is public, so no exchange API key is needed. To use AWS S3 instead of the local store,
 set `S3_ENDPOINT=` (empty) plus real AWS credentials and region.
 
+## Local development
+
+One venv covers every Python component, for the editor and for running tests on the host
+(component versions are kept aligned so they can share it):
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements-local.txt
+```
+
+In VS Code, select `.venv/bin/python` as the interpreter. Spark itself only runs in its Docker image;
+`pyspark` is in the venv just for imports and type hints in `lake/`.
+
 ## Tests
 
 | Suite | Command |

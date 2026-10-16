@@ -1,0 +1,14 @@
+# Single local dev environment for the editor and host-side tests, covering every Python component:
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements-local.txt
+# Component versions are kept aligned so they can share one venv. Containers and CI still
+# install each component's own requirements.
+-r requirements-dev.txt
+-e producer
+-r producer/requirements-dev.txt
+-r ml/requirements.txt
+-r ml/requirements-dev.txt
+-r api/requirements.txt
+-r api/requirements-dev.txt
+# Lake runs in the Spark image; these give the editor pyspark/delta for imports and type hints.
+pyspark==4.1.3
+delta-spark==4.4.1

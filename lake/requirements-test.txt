@@ -1,2 +1,2 @@
 pytest==8.4.2
-confluent-kafka==2.15.1
+confluent-kafka==2.16.0
