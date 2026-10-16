@@ -1,7 +1,7 @@
 """FastAPI app: read-only endpoints under /api for the pipeline dashboard."""
 
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Annotated
 
@@ -25,6 +25,14 @@ from .sources.base import KafkaSource, LakeSource
 PRODUCT_PATTERN = re.compile(r"^[A-Z0-9]{2,10}-[A-Z0-9]{2,10}$")
 
 
+def get_service(request: Request) -> PipelineService:
+    return request.app.state.service
+
+
+# Module level so type checkers treat it as a type alias (inside a function it's just a variable)
+Service = Annotated[PipelineService, Depends(get_service)]
+
+
 def build_sources(settings: Settings) -> tuple[KafkaSource, LakeSource]:
     if settings.data_source == "mock":
         from .sources.mock import MockKafkaSource, MockLakeSource
@@ -45,7 +53,7 @@ def create_app(
     settings = settings or get_settings()
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         real_kafka, real_lake = (kafka, lake) if kafka and lake else build_sources(settings)
         runner = SourceRunner(settings.source_timeout_seconds, settings.cache_ttl_seconds)
         app.state.service = PipelineService(settings, real_kafka, real_lake, runner)
@@ -74,11 +82,6 @@ def create_app(
         # Responses are live state; the server-side cache handles load
         response.headers["Cache-Control"] = "no-store"
         return response
-
-    def service(request: Request) -> PipelineService:
-        return request.app.state.service
-
-    Service = Annotated[PipelineService, Depends(service)]
 
     @app.get("/api/livez", response_model=LivenessResponse, tags=["ops"])
     async def livez() -> LivenessResponse:
