@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 
 import pytest
 from crypto_producer.app import Backfills, HealthFile
@@ -54,6 +55,14 @@ def test_health_file_is_touched_at_most_every_interval(tmp_path):
     path.unlink()
     health.touch()  # within the interval: no write
     assert not path.exists()
+
+
+def test_health_file_first_touch_writes_right_after_boot(tmp_path, monkeypatch):
+    # monotonic() counts from boot; on a fresh CI VM it can be smaller than the interval
+    monkeypatch.setattr(time, "monotonic", lambda: 3.0)
+    path = tmp_path / "healthy"
+    HealthFile(str(path), min_interval=60).touch()
+    assert path.exists()
 
 
 def test_health_file_disabled_when_no_path():

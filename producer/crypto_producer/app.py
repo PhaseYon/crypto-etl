@@ -69,11 +69,13 @@ class HealthFile:
     def __init__(self, path: str, min_interval: float = 5.0):
         self.path = Path(path) if path else None
         self.min_interval = min_interval
-        self._last = 0.0
+        # None = never touched. Not 0.0: monotonic time counts from boot, so on a freshly
+        # booted host (e.g. a CI VM) `now - 0.0` can be under the interval and skip the first write.
+        self._last: float | None = None
 
     def touch(self):
         now = time.monotonic()
-        if self.path and now - self._last >= self.min_interval:
+        if self.path and (self._last is None or now - self._last >= self.min_interval):
             self._last = now
             self.path.touch()
 
