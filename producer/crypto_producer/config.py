@@ -14,7 +14,7 @@ class Settings:
     rest_url: str = "https://api.exchange.coinbase.com"
     rest_timeout: float = 15.0
     rest_retries: int = 3
-    max_backfill_trades: int = 100_000
+    max_backfill_trades: int = 500_000
     startup_scan_messages: int = 5000
     startup_scan_timeout: float = 15.0
     # Shutdown budget: backfill wait + flush must fit inside Docker's stop_grace_period

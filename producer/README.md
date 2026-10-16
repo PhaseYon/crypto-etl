@@ -42,7 +42,7 @@ All settings are environment variables (validated at startup; a bad value exits 
 | `COINBASE_REST_URL` | `https://api.exchange.coinbase.com` | |
 | `REST_TIMEOUT` | `15` | Seconds per REST request |
 | `REST_RETRIES` | `3` | Retries per REST page (exponential backoff) |
-| `MAX_BACKFILL_TRADES` | `100000` | Larger gaps are logged, not backfilled |
+| `MAX_BACKFILL_TRADES` | `500000` | Larger gaps are logged, not backfilled (about a day of BTC at ~200 trades/min; a full-size backfill takes a few minutes) |
 | `STARTUP_SCAN_MESSAGES` | `5000` | Messages per partition read on startup to find the last trade_ids |
 | `STARTUP_SCAN_TIMEOUT` | `15` | Overall deadline for that scan |
 | `SHUTDOWN_BACKFILL_TIMEOUT` | `5` | How long shutdown waits for running backfills |

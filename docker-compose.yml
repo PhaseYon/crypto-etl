@@ -40,6 +40,8 @@ services:
       timeout: 10s
       retries: 10
     restart: unless-stopped
+    # Kafka needs more than Docker's default 10s to shut down cleanly; it was being SIGKILLed
+    stop_grace_period: 30s
 
   # One-shot job: creates topics once Kafka is healthy, then exits
   kafka-init:
