@@ -43,7 +43,9 @@ from .runner import Outcome, SourceRunner
 from .sources.base import TABLE_SPECS, KafkaSource, LakeSource, PartitionWatermarks, TableSnapshot
 
 SEVERITY: dict[Health, int] = {"inactive": 0, "ok": 1, "stale": 2, "down": 3}
-SCORE_COLUMNS = ("score", "probability", "prob_up", "prediction", "y_pred")
+# p_up and model_run_id are the contract columns (docs/CONTRACTS.md); the rest are tolerated fallbacks
+SCORE_COLUMNS = ("p_up", "score", "probability", "prob_up", "prediction", "y_pred")
+VERSION_COLUMNS = ("model_run_id", "model_version", "model")
 RECENT_QUARANTINE = 10
 PREDICTIONS_LIMIT = 200
 
@@ -428,7 +430,7 @@ def _backfill_share(outcome: Outcome, lookback_days: int) -> BackfillShare:
 
 
 def _to_prediction(row: dict[str, Any]) -> Prediction | None:
-    """Tolerant mapping: the ml/predictions schema isn't in the contract yet."""
+    """Maps an ml/predictions row, tolerating missing or differently named columns."""
     product = row.get("product_id")
     if not product:
         return None
@@ -437,7 +439,7 @@ def _to_prediction(row: dict[str, Any]) -> Prediction | None:
         score = float(score) if score is not None else None
     except (TypeError, ValueError):
         score = None
-    version = row.get("model_version", row.get("model"))
+    version = next((row[c] for c in VERSION_COLUMNS if row.get(c) is not None), None)
     return Prediction(
         product_id=str(product),
         window_start=_utc(row.get("window_start")),

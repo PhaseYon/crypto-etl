@@ -141,6 +141,24 @@ class TestPredictions:
         assert response.status == "inactive"
         assert response.reason == "ML predictions not available yet"
 
+    def test_contract_columns(self, settings):
+        now = datetime.now(UTC)
+        lake = FakeLake()
+        lake.prediction_rows = [
+            {
+                "product_id": "BTC-USD",
+                "window_start": now,
+                "horizon_minutes": 5,
+                "model_run_id": "a1b2c3",
+                "p_up": 0.57,
+                "predicted_label": 1,
+                "is_filled": 0,
+                "created_at": now,
+            }
+        ]
+        response = asyncio.run(make_service(settings, lake=lake).predictions())
+        assert [(p.product_id, p.score, p.model_version) for p in response.predictions] == [("BTC-USD", 0.57, "a1b2c3")]
+
     def test_tolerates_schema_variations(self, settings):
         now = datetime.now(UTC)
         lake = FakeLake()
