@@ -26,7 +26,7 @@ jobs:
             install: pip install -r requirements-dev.txt -r ml/requirements.txt -r ml/requirements-dev.txt
             test: pytest ml
           - component: api
-            python: "3.13"
+            python: "3.14"
             install: pip install -r requirements-dev.txt -r api/requirements.txt -r api/requirements-dev.txt
             test: pytest api/tests
     steps:

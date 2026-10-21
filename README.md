@@ -23,7 +23,7 @@ Interfaces between components (Kafka message format, table schemas, config) are 
 
 ## Tech stack
 
-Python 3.14 (producer, ML) · Kafka 4.1 (KRaft) · Spark 4.1 + Delta Lake 4.4 · RustFS (S3-compatible, local) / AWS S3 ·
+Python 3.14 (producer, ML, API) · Kafka 4.1 (KRaft) · Spark 4.1 + Delta Lake 4.4 · RustFS (S3-compatible, local) / AWS S3 ·
 delta-rs · scikit-learn · MLflow · FastAPI · React 19 + TypeScript + Vite + TanStack Query + lightweight-charts ·
 Docker Compose · pytest · Vitest · Playwright · ruff · GitHub Actions
 
