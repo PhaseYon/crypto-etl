@@ -3,7 +3,9 @@
 import threading
 
 from confluent_kafka import Consumer, KafkaException, TopicPartition
-from confluent_kafka.admin import AdminClient, ConfigResource, ResourceType
+
+# confluent_kafka.admin documents these as public but doesn't re-export them in a way type checkers accept
+from confluent_kafka.admin import AdminClient, ConfigResource, ResourceType  # pyright: ignore[reportPrivateImportUsage]
 
 from .base import PartitionWatermarks
 
