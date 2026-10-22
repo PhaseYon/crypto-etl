@@ -8,10 +8,23 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from crypto_ml.features import FEATURE_COLUMNS, build_features
+from crypto_ml.features import (
+    FEATURE_COLUMNS,
+    REALIZED_VOL,
+    VOL_REGIME,
+    VOL_THRESHOLD,
+    add_vol_regime,
+    build_features,
+)
 
-LABEL = "label"  # 1 if the forward log return over the horizon is > 0, else 0 (down or flat)
+LABEL = "label"
+# direction: label = 1 if the forward log return over the horizon is > 0, else 0 (down or flat)
 TARGET_RETURN = "fwd_ret"
+# volatility: label = 1 if realized vol over the next horizon minutes exceeds its trailing-day median
+TARGET_VOL = "fwd_vol"
+TARGETS = ("direction", "volatility")
+# Realized value each target's IC is measured against
+TARGET_VALUE = {"direction": TARGET_RETURN, "volatility": TARGET_VOL}
 
 
 def add_labels(features: pd.DataFrame, horizon: int) -> pd.DataFrame:
@@ -29,10 +42,35 @@ def add_labels(features: pd.DataFrame, horizon: int) -> pd.DataFrame:
     return out.reset_index(drop=True)
 
 
-def build_dataset(ohlcv: pd.DataFrame, horizon: int) -> pd.DataFrame:
+def add_volatility_labels(features: pd.DataFrame, horizon: int) -> pd.DataFrame:
+    """Add the vol regime feature, realized vol over the next `horizon` minutes, and its label.
+
+    The label compares future vol with the threshold known at t (the trailing-day median), so the
+    threshold itself never sees the future. Rows whose label window runs past the data, or that are
+    still warming up the threshold, are dropped.
+    """
+    if horizon < 2:
+        raise ValueError("volatility horizon must be >= 2 minutes (a standard deviation needs 2 returns)")
+    out = add_vol_regime(features, horizon)
+    out[TARGET_VOL] = out.groupby("product_id", sort=False)[REALIZED_VOL].shift(-horizon)
+    out = out[out[TARGET_VOL].notna() & out[VOL_THRESHOLD].notna()].copy()
+    out[LABEL] = (out[TARGET_VOL] > out[VOL_THRESHOLD]).astype("int8")
+    return out.reset_index(drop=True)
+
+
+def feature_columns_for(target: str) -> list[str]:
+    """Every causal feature available to models of `target`."""
+    if target not in TARGETS:
+        raise ValueError(f"unknown target {target!r}; expected one of {TARGETS}")
+    return FEATURE_COLUMNS + [VOL_REGIME] if target == "volatility" else list(FEATURE_COLUMNS)
+
+
+def build_dataset(ohlcv: pd.DataFrame, horizon: int, target: str = "direction") -> pd.DataFrame:
     """Features + labels with warm-up and incomplete-label rows removed, sorted by time."""
-    data = add_labels(build_features(ohlcv), horizon)
-    data = data.dropna(subset=FEATURE_COLUMNS)
+    cols = feature_columns_for(target)
+    features = build_features(ohlcv)
+    data = add_volatility_labels(features, horizon) if target == "volatility" else add_labels(features, horizon)
+    data = data.dropna(subset=cols)
     return data.sort_values(["window_start", "product_id"]).reset_index(drop=True)
 
 

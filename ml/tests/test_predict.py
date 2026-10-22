@@ -74,3 +74,16 @@ def test_stale_gold_fails_loudly(trained):
     gold, out, _ = trained
     with pytest.raises(StaleDataError, match="no candles newer"):
         main(["--table-uri", gold, "--output-uri", out, "--as-of", (END + timedelta(hours=2)).isoformat()])
+
+
+def test_volatility_models_are_refused(tmp_path):
+    from tests.test_training import regime_ohlcv
+
+    gold = str(tmp_path / "gold")
+    ohlcv = regime_ohlcv(("BTC-USD",), segments=16)
+    write_ohlcv_delta(ohlcv, gold)
+    args = ["--products", "BTC-USD", "--horizon", "15", "--target", "volatility", "--table-uri", gold]
+    _, _, run_id = run(build_parser().parse_args(args))
+    as_of = ohlcv["window_start"].max().isoformat()
+    with pytest.raises(ValueError, match="volatility model"):
+        main(["--run-id", run_id, "--table-uri", gold, "--output-uri", str(tmp_path / "p"), "--as-of", as_of])

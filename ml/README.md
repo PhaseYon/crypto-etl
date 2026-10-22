@@ -1,7 +1,7 @@
 # ml: features, training and batch inference on the lake
 
 Reads `gold/ohlcv_1m` (see `docs/CONTRACTS.md`), builds features and labels, trains a
-direction model against baselines, tracks everything in MLflow, and writes predictions
+direction or volatility model against baselines, tracks everything in MLflow, and writes predictions
 back to the lake.
 
 ```
@@ -15,9 +15,9 @@ gold/ohlcv_1m ──► regular minute grid ──► causal features ──► 
 | `crypto_ml/data.py` | Read gold via delta-rs (local path or S3/MinIO), validate the contract schema, filter by product/time |
 | `crypto_ml/synthetic.py` | Contract-conformant synthetic candles for tests and demos |
 | `crypto_ml/features.py` | Forward-filled minute grid and strictly causal features |
-| `crypto_ml/dataset.py` | Labels, dataset, train/val/test split and walk-forward CV with an embargo |
-| `crypto_ml/models.py` | Baselines, gradient-boosted model, metrics |
-| `crypto_ml/training.py` | Train and evaluate model + baselines on one split |
+| `crypto_ml/dataset.py` | Direction and volatility labels, dataset, train/val/test split and walk-forward CV with an embargo |
+| `crypto_ml/models.py` | Baselines, gradient-boosted and logistic models, metrics |
+| `crypto_ml/training.py` | Train candidates + baselines on one split, select on validation, walk-forward evaluation |
 | `crypto_ml/tracking.py` | MLflow logging, finding and loading models |
 | `crypto_ml/train.py`, `predict.py` | CLIs |
 
@@ -44,8 +44,30 @@ python -m crypto_ml.train --products BTC-USD,ETH-USD --start 2026-10-01 --end 20
 ```
 
 Prints model vs baseline metrics on validation and test, and logs a run to MLflow. Options:
-`--embargo` (minutes, default = horizon), `--train-frac`, `--val-frac`, `--seed`,
-`--table-version` (train on a fixed Delta version), `--experiment`, `--no-mlflow`.
+`--target` (`direction` or `volatility`, below), `--walk-forward N` (also report mean metrics over
+N expanding-window folds), `--embargo` (minutes, default = horizon), `--train-frac`, `--val-frac`,
+`--seed`, `--table-version` (train on a fixed Delta version), `--experiment` (default: one per
+target, `crypto-direction` or `crypto-volatility`), `--no-mlflow`.
+
+### Targets
+
+- `direction` (default): will the close be higher `horizon` minutes from now? Candidate: the
+  gradient-boosted model. Baselines: `majority`, `momentum`.
+- `volatility`: will realized volatility over the next `horizon` minutes exceed its trailing-day
+  median (the threshold known now)? Volatility clusters, so this is far more predictable than
+  direction. Candidates: the gradient-boosted model on every feature plus `vol_regime` (current
+  volatility vs that median), and a logistic regression on `vol_regime` alone. Baselines:
+  `majority`, and `persistence` ("the regime stays as it is now").
+
+The candidate with the lowest validation log loss is selected and logged as the run's model;
+test is still touched once, for reporting.
+
+```bash
+python -m crypto_ml.train --products BTC-USD,ETH-USD,SOL-USD --target volatility --horizon 60 --walk-forward 5
+```
+
+`crypto_ml.predict` only accepts direction models for now: `ml/predictions` and the dashboard
+describe P(up), so a volatility model is refused rather than written under the wrong meaning.
 
 Try it without a lake by writing synthetic data to a local table:
 
@@ -69,7 +91,7 @@ Scores the most recent minutes of each product the model was trained on and MERG
 
 ```bash
 docker compose --profile ml build
-docker compose --profile ml run --rm ml-train      # ML_PRODUCTS, ML_HORIZON override the defaults
+docker compose --profile ml run --rm ml-train      # ML_PRODUCTS, ML_TARGET, ML_HORIZON, ML_WALK_FORWARD override the defaults
 docker compose --profile ml run --rm ml-predict    # ML_SCORE_MINUTES
 ```
 
@@ -84,10 +106,12 @@ mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db     # from the director
 ```
 
 Each run has:
-- params: horizon, seed, split fractions, embargo, chosen boosting iterations, all model hyperparameters
-- metrics: `<model>.<split>.<metric>` for `gbm`, `majority` and `momentum` on `val` and `test`
-  (`accuracy`, `roc_auc`, `log_loss`, `brier`, `ic`, `positive_rate`, `n`)
-- tags: `data.table_uri`, `data.table_version` (the exact Delta version read), products, time range
+- params: target, horizon, seed, split fractions, embargo, chosen boosting iterations, all model hyperparameters
+- metrics: `<model>.<split>.<metric>` for every candidate and baseline on `val` and `test`
+  (`accuracy`, `roc_auc`, `log_loss`, `brier`, `ic`, `positive_rate`, `n`), and with
+  `--walk-forward`, `wf.<model>.<metric>` means over the folds plus `wf.<model>.roc_auc_min`
+- tags: `target`, `selected_model`, `data.table_uri`, `data.table_version` (the exact Delta version
+  read), products, time range
 - artifacts: the model, `model_meta.json` (feature columns, horizon, products, lookback), `splits.json`
 
 MLflow 3.x refuses the plain file store, so tracking uses SQLite. For a shared team server, run

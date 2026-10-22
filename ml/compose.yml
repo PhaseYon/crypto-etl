@@ -31,8 +31,12 @@ services:
       - crypto_ml.train
       - --products
       - ${ML_PRODUCTS:-BTC-USD,ETH-USD,SOL-USD}
+      - --target
+      - ${ML_TARGET:-direction}
       - --horizon
       - ${ML_HORIZON:-5}
+      - --walk-forward
+      - ${ML_WALK_FORWARD:-0}
 
   ml-predict:
     <<: *ml-job
