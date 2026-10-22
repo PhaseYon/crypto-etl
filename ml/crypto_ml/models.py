@@ -7,6 +7,7 @@ import pandas as pd
 from scipy.stats import spearmanr
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, brier_score_loss, log_loss, roc_auc_score
 
 _EPS = 1e-6
@@ -63,6 +64,11 @@ def make_gbm(seed: int, max_iter: int = 400) -> HistGradientBoostingClassifier:
         early_stopping=False,
         random_state=seed,
     )
+
+
+def make_logit(seed: int) -> LogisticRegression:
+    """Plain logistic regression: the simple challenger, meant for a handful of strong features."""
+    return LogisticRegression(random_state=seed)
 
 
 def best_iteration(model: HistGradientBoostingClassifier, X_val: pd.DataFrame, y_val: pd.Series) -> int:

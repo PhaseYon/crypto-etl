@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from crypto_ml.features import FEATURE_COLUMNS, MAX_LOOKBACK_MINUTES, build_features, to_regular_grid
+from crypto_ml.features import FEATURE_COLUMNS, MAX_LOOKBACK_MINUTES, add_vol_regime, build_features, to_regular_grid
 from crypto_ml.synthetic import generate_ohlcv
 
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -81,3 +81,18 @@ def test_features_are_causal(ohlcv):
 def test_empty_input():
     empty = generate_ohlcv([], T0, 10)
     assert build_features(empty).empty
+
+
+def test_vol_regime_is_causal(ohlcv):
+    cutoff = pd.Timestamp(T0) + pd.Timedelta(minutes=400)
+    future = ohlcv["window_start"] > cutoff
+    perturbed = ohlcv.copy()
+    for col in ("open", "high", "low", "close", "vwap"):
+        perturbed.loc[future, col] *= 3.0
+
+    def past(frame):
+        regime = add_vol_regime(build_features(frame), 15)
+        return regime[regime["window_start"] <= cutoff].reset_index(drop=True)
+
+    pd.testing.assert_frame_equal(past(ohlcv), past(perturbed))
+    pd.testing.assert_frame_equal(past(ohlcv), past(ohlcv[~future]))

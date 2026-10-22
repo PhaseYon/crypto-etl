@@ -1,6 +1,7 @@
-"""CLI: train a direction model on gold/ohlcv_1m and compare it with baselines.
+"""CLI: train a direction or volatility model on gold/ohlcv_1m and compare it with baselines.
 
 python -m crypto_ml.train --products BTC-USD,ETH-USD --start 2026-10-01 --end 2026-10-08 --horizon 5
+python -m crypto_ml.train --products BTC-USD,ETH-USD,SOL-USD --target volatility --horizon 60 --walk-forward 5
 """
 
 from __future__ import annotations
@@ -12,9 +13,9 @@ from datetime import UTC, datetime
 
 from crypto_ml.config import GOLD_OHLCV_PATH, StorageConfig
 from crypto_ml.data import read_ohlcv
-from crypto_ml.dataset import build_dataset
-from crypto_ml.tracking import DEFAULT_EXPERIMENT, log_training_run
-from crypto_ml.training import TrainResult, train_and_evaluate
+from crypto_ml.dataset import TARGETS, build_dataset
+from crypto_ml.tracking import EXPERIMENTS, log_training_run
+from crypto_ml.training import TrainResult, train_and_evaluate, walk_forward_evaluate
 
 log = logging.getLogger("crypto_ml.train")
 
@@ -29,6 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--products", required=True, help="Comma-separated, e.g. BTC-USD,ETH-USD")
     p.add_argument("--start", type=parse_time, help="Inclusive UTC start (ISO-8601)")
     p.add_argument("--end", type=parse_time, help="Exclusive UTC end (ISO-8601)")
+    p.add_argument("--target", choices=TARGETS, default="direction", help="What the label predicts")
     p.add_argument("--horizon", type=int, default=5, help="Label horizon in minutes")
     p.add_argument("--embargo", type=int, help="Gap between splits in minutes (default: horizon)")
     p.add_argument("--train-frac", type=float, default=0.7)
@@ -36,17 +38,23 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--table-uri", help=f"gold table (default: s3://$LAKE_BUCKET/{GOLD_OHLCV_PATH})")
     p.add_argument("--table-version", type=int, help="Delta version to read (default: latest)")
-    p.add_argument("--experiment", default=DEFAULT_EXPERIMENT, help="MLflow experiment name")
+    p.add_argument(
+        "--walk-forward", type=int, default=0, metavar="N", help="Also report mean metrics over N walk-forward folds"
+    )
+    p.add_argument("--experiment", help="MLflow experiment name (default: one per target, e.g. crypto-direction)")
     p.add_argument("--no-mlflow", action="store_true", help="Skip experiment tracking")
     return p
 
 
 def summary_table(result: TrainResult) -> str:
     keys = ("accuracy", "roc_auc", "log_loss", "ic")
-    lines = [f"{'model':<10}{'split':<6}" + "".join(f"{k:>10}" for k in keys)]
+    lines = [f"{'model':<12}{'split':<6}" + "".join(f"{k:>10}" for k in keys)]
     for model, splits in result.metrics.items():
         for split, m in splits.items():
-            lines.append(f"{model:<10}{split:<6}" + "".join(f"{m.get(k, float('nan')):>10.4f}" for k in keys))
+            lines.append(f"{model:<12}{split:<6}" + "".join(f"{m.get(k, float('nan')):>10.4f}" for k in keys))
+    for model, m in result.walk_forward.items():
+        lines.append(f"{model:<12}{'wf':<6}" + "".join(f"{m.get(k, float('nan')):>10.4f}" for k in keys))
+    lines.append(f"selected: {result.selected_model} ({result.target}, lowest validation log loss)")
     return "\n".join(lines)
 
 
@@ -58,10 +66,20 @@ def run(args: argparse.Namespace) -> tuple[TrainResult, dict, str | None]:
         raise SystemExit(f"no candles in {uri} for {products} in [{args.start}, {args.end})")
     log.info("read %d candles from %s (version %d)", len(data_in.frame), uri, data_in.table_version)
 
-    dataset = build_dataset(data_in.frame, args.horizon)
+    dataset = build_dataset(data_in.frame, args.horizon, target=args.target)
     result = train_and_evaluate(
-        dataset, args.horizon, seed=args.seed, train_frac=args.train_frac, val_frac=args.val_frac, embargo=args.embargo
+        dataset,
+        args.horizon,
+        seed=args.seed,
+        train_frac=args.train_frac,
+        val_frac=args.val_frac,
+        embargo=args.embargo,
+        target=args.target,
     )
+    if args.walk_forward:
+        result.walk_forward = walk_forward_evaluate(
+            dataset, args.horizon, n_splits=args.walk_forward, seed=args.seed, embargo=args.embargo, target=args.target
+        )
     data_info = {
         "table_uri": uri,
         "table_version": data_in.table_version,
@@ -78,10 +96,10 @@ def run(args: argparse.Namespace) -> tuple[TrainResult, dict, str | None]:
             "train_frac": args.train_frac,
             "val_frac": args.val_frac,
             "embargo": args.embargo if args.embargo is not None else args.horizon,
+            "walk_forward_folds": args.walk_forward,
         }
-        run_id = log_training_run(
-            result, data_info, params, dataset[result.feature_columns], experiment=args.experiment
-        )
+        experiment = args.experiment or EXPERIMENTS[args.target]
+        run_id = log_training_run(result, data_info, params, dataset[result.feature_columns], experiment=experiment)
     return result, data_info, run_id
 
 
@@ -91,7 +109,7 @@ def main(argv: list[str] | None = None) -> TrainResult:
     result, data_info, run_id = run(args)
     log.info("data: %s", json.dumps(data_info))
     if run_id:
-        log.info("logged MLflow run %s in experiment '%s'", run_id, args.experiment)
+        log.info("logged MLflow run %s in experiment '%s'", run_id, args.experiment or EXPERIMENTS[args.target])
     log.info("best iteration %d, splits %s", result.best_iteration, result.split_sizes)
     print(summary_table(result))
     return result

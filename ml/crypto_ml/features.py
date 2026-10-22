@@ -109,6 +109,36 @@ def _product_features(g: pd.DataFrame) -> pd.DataFrame:
     return f
 
 
+VOL_REGIME = "vol_regime"  # log(realized vol over the last h minutes / its trailing-day median)
+REALIZED_VOL = "realized_vol"
+VOL_THRESHOLD = "vol_threshold"
+VOL_REGIME_WINDOW_MINUTES = 1440
+# The trailing median starts after 6 hours of history rather than a full day, so a week of data
+# loses a quarter day instead of a whole one to warm-up.
+VOL_REGIME_MIN_MINUTES = 360
+
+
+def add_vol_regime(features: pd.DataFrame, horizon: int) -> pd.DataFrame:
+    """Add realized volatility over the last `horizon` minutes, its trailing-day median and their log ratio.
+
+    Expects build_features() output (one row per product per minute, sorted by time within a
+    product). Everything is computed from minutes at or before t.
+    """
+    out = features.copy()
+    by_product = out.groupby("product_id", sort=False)
+    ret_1 = by_product["close"].transform(lambda c: np.log(c).diff())
+    out[REALIZED_VOL] = ret_1.groupby(out["product_id"], sort=False).transform(
+        lambda r: r.rolling(horizon, min_periods=horizon).std()
+    )
+    out[VOL_THRESHOLD] = out.groupby("product_id", sort=False)[REALIZED_VOL].transform(
+        lambda v: v.rolling(VOL_REGIME_WINDOW_MINUTES, min_periods=VOL_REGIME_MIN_MINUTES).median()
+    )
+    # A flat stretch (zero vol) has no defined ratio; leave it NaN so the row is dropped, not infinite
+    ratio = out[REALIZED_VOL] / out[VOL_THRESHOLD].where(out[VOL_THRESHOLD] > 0)
+    out[VOL_REGIME] = np.log(ratio.where(ratio > 0))
+    return out
+
+
 def build_features(ohlcv: pd.DataFrame) -> pd.DataFrame:
     """Features per product and minute on a regular grid.
 

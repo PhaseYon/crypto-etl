@@ -11,10 +11,12 @@ import mlflow.sklearn
 import pandas as pd
 
 from crypto_ml.config import mlflow_artifact_root, mlflow_tracking_uri
-from crypto_ml.features import MAX_LOOKBACK_MINUTES
+from crypto_ml.features import MAX_LOOKBACK_MINUTES, VOL_REGIME_WINDOW_MINUTES
 from crypto_ml.training import TrainResult
 
 DEFAULT_EXPERIMENT = "crypto-direction"
+# One experiment per target, so the default "latest model" lookup never mixes them up
+EXPERIMENTS = {"direction": DEFAULT_EXPERIMENT, "volatility": "crypto-volatility"}
 MODEL_ARTIFACT = "model"
 META_ARTIFACT = "model_meta.json"
 # MLflow serializes sklearn models with skops, which refuses unreviewed types on load. We only
@@ -61,12 +63,13 @@ def log_training_run(
         mlflow.log_params(
             {
                 **params,
+                "target": result.target,
                 "horizon": result.horizon,
                 "best_iteration": result.best_iteration,
                 "n_features": len(result.feature_columns),
             }
         )
-        mlflow.log_params({f"gbm.{k}": v for k, v in result.model.get_params().items()})
+        mlflow.log_params({f"{result.selected_model}.{k}": v for k, v in result.model.get_params().items()})
         mlflow.log_params({f"split.{k}_rows": v for k, v in result.split_sizes.items()})
         mlflow.log_metrics({k: v for k, v in result.flat_metrics().items() if not math.isnan(v)})
         mlflow.set_tags(
@@ -77,6 +80,8 @@ def log_training_run(
                 "data.start": str(data_info.get("start")),
                 "data.end": str(data_info.get("end")),
                 "data.rows": str(data_info.get("rows")),
+                "target": result.target,
+                "selected_model": result.selected_model,
             }
         )
         mlflow.log_dict({**result.split_bounds, "sizes": result.split_sizes}, "splits.json")
@@ -90,12 +95,21 @@ def log_training_run(
 
 def model_meta(result: TrainResult, data_info: dict[str, Any]) -> dict[str, Any]:
     """Everything inference needs to reproduce the model's inputs."""
+    if result.target == "volatility":
+        window = VOL_REGIME_WINDOW_MINUTES
+        label = f"1 if realized vol over (t, t+{result.horizon}m] > its trailing {window}m median at t"
+        lookback = max(MAX_LOOKBACK_MINUTES, VOL_REGIME_WINDOW_MINUTES + result.horizon)
+    else:
+        label = f"1 if log(close[t+{result.horizon}m] / close[t]) > 0 else 0"
+        lookback = MAX_LOOKBACK_MINUTES
     return {
+        "target": result.target,
+        "model": result.selected_model,
         "feature_columns": result.feature_columns,
         "horizon_minutes": result.horizon,
-        "label": f"1 if log(close[t+{result.horizon}m] / close[t]) > 0 else 0",
+        "label": label,
         "products": data_info["products"],
-        "max_lookback_minutes": MAX_LOOKBACK_MINUTES,
+        "max_lookback_minutes": lookback,
         "trained_on": {k: data_info.get(k) for k in ("table_uri", "table_version", "start", "end")},
     }
 

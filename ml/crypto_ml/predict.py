@@ -113,6 +113,9 @@ def run(args: argparse.Namespace) -> pd.DataFrame:
     output_uri = args.output_uri or cfg.table_uri(PREDICTIONS_PATH)
     run_id = args.run_id or latest_run_id(args.experiment)
     model, meta = load_model(run_id)
+    if meta.get("target", "direction") != "direction":
+        # ml/predictions' contract (p_up, predicted_label) and the dashboard only describe direction
+        raise ValueError(f"run {run_id} is a {meta['target']} model; only direction models write {output_uri}")
     products = args.products.split(",") if args.products else meta["products"]
     as_of = args.as_of or datetime.now(UTC)
 
