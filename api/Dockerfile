@@ -1,5 +1,5 @@
 # Read-only dashboard API. No secrets are baked in: credentials come from the environment.
-FROM python:3.13.16-slim-bookworm
+FROM python:3.14.4-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
