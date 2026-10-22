@@ -1,9 +1,10 @@
 """Settings loaded from environment variables (see .env.example and docs/CONTRACTS.md)."""
 
+from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +13,9 @@ class Settings(BaseSettings):
 
     data_source: Literal["real", "mock"] = "real"
     mock_scenario: Literal["healthy", "degraded"] = "healthy"
+    # Serve a frozen copy of the lake as of this moment (e.g. a public demo without Kafka or Spark):
+    # freshness and time windows are measured from it, and Kafka is reported as not deployed.
+    snapshot_at: datetime | None = None
 
     kafka_bootstrap: str = "localhost:9092"
     kafka_topic: str = "raw.trades"
@@ -42,6 +46,15 @@ class Settings(BaseSettings):
 
     backfill_lookback_days: int = 1
     cors_origins_csv: str = Field(default="", alias="CORS_ORIGINS")
+
+    @field_validator("snapshot_at")
+    @classmethod
+    def _snapshot_in_utc(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            raise ValueError("SNAPSHOT_AT needs a timezone, e.g. 2026-10-22T08:10:00Z")
+        return value.astimezone(UTC)
 
     @property
     def products(self) -> list[str]:

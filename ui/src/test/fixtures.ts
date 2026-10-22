@@ -13,6 +13,7 @@ export const NOW = "2026-10-15T12:00:00Z";
 export const meta: MetaResponse = {
   version: "0.1.0",
   data_source: "mock",
+  snapshot_at: null,
   products: ["BTC-USD", "ETH-USD", "SOL-USD"],
   poll_interval_ms: 5000,
   thresholds: {

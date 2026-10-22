@@ -20,7 +20,7 @@ from .models import (
 )
 from .runner import SourceRunner
 from .services import PipelineService
-from .sources.base import KafkaSource, LakeSource
+from .sources.base import KafkaSource, LakeSource, NotDeployedKafka
 
 PRODUCT_PATTERN = re.compile(r"^[A-Z0-9]{2,10}-[A-Z0-9]{2,10}$")
 
@@ -38,11 +38,16 @@ def build_sources(settings: Settings) -> tuple[KafkaSource, LakeSource]:
         from .sources.mock import MockKafkaSource, MockLakeSource
 
         return MockKafkaSource(), MockLakeSource(settings.products, degraded=settings.mock_scenario == "degraded")
-    from .sources.kafka import KafkaMetadataSource
     from .sources.lake import DeltaLakeSource
 
+    lake = DeltaLakeSource(settings.lake_root, settings.storage_options())
+    if settings.snapshot_at is not None:
+        # A snapshot has no broker; don't start a client that would retry connecting forever
+        return NotDeployedKafka(), lake
+    from .sources.kafka import KafkaMetadataSource
+
     kafka = KafkaMetadataSource(settings.kafka_bootstrap, settings.kafka_topic, settings.source_timeout_seconds)
-    return kafka, DeltaLakeSource(settings.lake_root, settings.storage_options())
+    return kafka, lake
 
 
 def create_app(

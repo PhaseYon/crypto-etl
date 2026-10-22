@@ -24,45 +24,53 @@ export function useMeta() {
   });
 }
 
-function usePollMs(): number {
-  return useMeta().data?.poll_interval_ms ?? DEFAULT_POLL_MS;
+/** When the API serves a frozen lake snapshot, its timestamp; null for a live pipeline. */
+export function useSnapshotAt(): string | null {
+  return useMeta().data?.snapshot_at ?? null;
+}
+
+/** Poll every `multiplier` × the API's interval; a snapshot never changes, so it's fetched once. */
+function usePolling(multiplier = 1) {
+  const meta = useMeta().data;
+  if (meta?.snapshot_at) return false as const;
+  return polling((meta?.poll_interval_ms ?? DEFAULT_POLL_MS) * multiplier);
 }
 
 export function usePipeline() {
-  const pollMs = usePollMs();
+  const refetchInterval = usePolling();
   return useQuery({
     queryKey: ["pipeline"],
     queryFn: ({ signal }) => apiGet("/api/pipeline", undefined, signal),
-    refetchInterval: polling(pollMs),
+    refetchInterval,
   });
 }
 
 export function useMarket(product: string | undefined, minutes: number) {
-  const pollMs = usePollMs();
+  const refetchInterval = usePolling(3);
   return useQuery({
     queryKey: ["market", product, minutes],
     queryFn: ({ signal }) => apiGet("/api/market/ohlcv", { product: product ?? "", minutes }, signal),
     enabled: product !== undefined,
     // Keep the previous chart on screen while a new product/range loads
     placeholderData: keepPreviousData,
-    refetchInterval: polling(pollMs * 3),
+    refetchInterval,
   });
 }
 
 export function useQuality() {
-  const pollMs = usePollMs();
+  const refetchInterval = usePolling(3);
   return useQuery({
     queryKey: ["quality"],
     queryFn: ({ signal }) => apiGet("/api/quality", undefined, signal),
-    refetchInterval: polling(pollMs * 3),
+    refetchInterval,
   });
 }
 
 export function usePredictions() {
-  const pollMs = usePollMs();
+  const refetchInterval = usePolling(6);
   return useQuery({
     queryKey: ["predictions"],
     queryFn: ({ signal }) => apiGet("/api/ml/predictions", undefined, signal),
-    refetchInterval: polling(pollMs * 6),
+    refetchInterval,
   });
 }

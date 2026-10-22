@@ -101,6 +101,16 @@ class KafkaSource(Protocol):
     def retention_ms(self) -> int | None: ...
 
 
+class NotDeployedKafka:
+    """Stands in for Kafka when the API serves a lake snapshot; the service never calls it."""
+
+    def watermarks(self) -> list[PartitionWatermarks]:
+        raise RuntimeError("Kafka isn't deployed in snapshot mode")
+
+    def retention_ms(self) -> int | None:
+        raise RuntimeError("Kafka isn't deployed in snapshot mode")
+
+
 class LakeSource(Protocol):
     def table_snapshot(self, spec: TableSpec) -> TableSnapshot:
         """Raises TableMissingError if the table doesn't exist."""

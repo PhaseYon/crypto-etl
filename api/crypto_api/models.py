@@ -176,6 +176,8 @@ class PredictionsResponse(BaseModel):
 class MetaResponse(BaseModel):
     version: str
     data_source: Literal["real", "mock"]
+    # Set when the API serves a frozen lake snapshot; freshness is measured from this moment
+    snapshot_at: datetime | None
     products: list[str]
     poll_interval_ms: int
     thresholds: Thresholds

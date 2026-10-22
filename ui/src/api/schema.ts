@@ -245,6 +245,8 @@ export interface components {
              * @enum {string}
              */
             data_source: "real" | "mock";
+            /** Snapshot At */
+            snapshot_at: string | null;
             /** Products */
             products: string[];
             /** Poll Interval Ms */

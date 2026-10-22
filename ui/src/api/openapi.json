@@ -575,6 +575,18 @@
             ],
             "title": "Data Source"
           },
+          "snapshot_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot At"
+          },
           "products": {
             "items": {
               "type": "string"
@@ -594,6 +606,7 @@
         "required": [
           "version",
           "data_source",
+          "snapshot_at",
           "products",
           "poll_interval_ms",
           "thresholds"

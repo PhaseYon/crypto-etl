@@ -41,3 +41,16 @@ def test_products_and_cors_from_env(monkeypatch):
 def test_secrets_not_in_repr():
     settings = Settings(aws_secret_access_key=SecretStr("hunter22"))
     assert "hunter22" not in repr(settings)
+
+
+def test_snapshot_at_is_normalized_to_utc_and_needs_a_timezone(monkeypatch):
+    import pytest
+    from pydantic import ValidationError
+
+    monkeypatch.setenv("SNAPSHOT_AT", "2026-10-22T04:10:00-04:00")
+    assert Settings().snapshot_at.isoformat() == "2026-10-22T08:10:00+00:00"
+    monkeypatch.setenv("SNAPSHOT_AT", "2026-10-22T08:10:00")
+    with pytest.raises(ValidationError, match="timezone"):
+        Settings()
+    monkeypatch.delenv("SNAPSHOT_AT")
+    assert Settings().snapshot_at is None

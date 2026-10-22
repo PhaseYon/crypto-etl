@@ -1,4 +1,4 @@
-import { usePipeline } from "../../api/queries";
+import { usePipeline, useSnapshotAt } from "../../api/queries";
 import type { PipelineResponse } from "../../api/types";
 import { HealthBadge } from "../../components/HealthBadge";
 import { overallHealth } from "../../lib/health";
@@ -8,11 +8,16 @@ import { PipelineDiagram } from "./PipelineDiagram";
 
 export function PipelineView() {
   const query = usePipeline();
+  const snapshotAt = useSnapshotAt();
   return (
     <div className="stack">
       <Panel
         title="Pipeline"
-        subtitle="Live state of each stage, refreshed every few seconds"
+        subtitle={
+          snapshotAt
+            ? "State of each stage when the snapshot was taken"
+            : "Live state of each stage, refreshed every few seconds"
+        }
         query={query}
         actions={
           query.data ? (
@@ -25,7 +30,11 @@ export function PipelineView() {
         {(data) => (
           <>
             <PipelineDiagram stages={data.stages} />
-            <p className="footer">Updated {formatAgo(data.generated_at)}</p>
+            <p className="footer">
+              {snapshotAt
+                ? `Snapshot taken ${formatTime(snapshotAt)}`
+                : `Updated ${formatAgo(data.generated_at)}`}
+            </p>
           </>
         )}
       </Panel>
