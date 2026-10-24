@@ -41,14 +41,16 @@ export function PipelineView() {
       <div className="stack">
         <Panel
           title="Kafka → bronze"
-          subtitle={query.data ? kafkaSubtitle(query.data) : undefined}
+          subtitle={query.data ? kafkaSubtitle(query.data, snapshotAt !== null) : undefined}
           query={query}
           isEmpty={(data) =>
-            data.kafka.status === "down"
-              ? `Kafka unreachable: ${data.kafka.error ?? "unknown error"}`
-              : data.kafka.partitions.length === 0
-                ? "The topic has no partitions"
-                : null
+            snapshotAt
+              ? "Kafka isn't deployed for the snapshot; partitions and lag exist only while the pipeline runs"
+              : data.kafka.status === "down"
+                ? `Kafka unreachable: ${data.kafka.error ?? "unknown error"}`
+                : data.kafka.partitions.length === 0
+                  ? "The topic has no partitions"
+                  : null
           }
         >
           {(data) => <PartitionTable data={data} />}
@@ -61,8 +63,9 @@ export function PipelineView() {
   );
 }
 
-function kafkaSubtitle(data: PipelineResponse): string {
+function kafkaSubtitle(data: PipelineResponse, snapshot: boolean): string {
   const k = data.kafka;
+  if (snapshot) return `topic ${k.topic} · not deployed`;
   const parts = [`topic ${k.topic}`, `${formatRate(k.ingest_rate_per_second)} ingest`];
   if (k.retention_hours !== null) parts.push(`${formatCount(k.retention_hours)}h retention`);
   return parts.join(" · ");

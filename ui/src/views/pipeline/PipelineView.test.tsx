@@ -91,5 +91,7 @@ describe("PipelineView", () => {
     expect(await screen.findByText(/^Snapshot taken /)).toBeInTheDocument();
     expect(screen.getByText("State of each stage when the snapshot was taken")).toBeInTheDocument();
     expect(screen.queryByText(/^Updated /)).not.toBeInTheDocument();
+    expect(screen.getByText(/Kafka isn't deployed for the snapshot/)).toBeInTheDocument();
+    expect(screen.getByText("topic raw.trades · not deployed")).toBeInTheDocument();
   });
 });
