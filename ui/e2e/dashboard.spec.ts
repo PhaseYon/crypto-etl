@@ -57,9 +57,12 @@ test("data quality and ML views load", async ({ page }) => {
   await page.getByRole("tab", { name: "ML" }).click();
   await expect(page).toHaveURL(/#\/ml$/);
   await expect(page.getByRole("heading", { name: "Model predictions" })).toBeVisible();
-  if (!snapshot) {
-    // Named lookup: the chart library lays out its canvas with an internal <table>
-    await expect(page.getByRole("table", { name: "Latest prediction per product" })).toBeVisible();
+  // Named lookup: the chart library lays out its canvas with an internal <table>
+  const latest = page.getByRole("table", { name: "Latest prediction per product" });
+  await expect(latest).toBeVisible();
+  if (snapshot) {
+    // The deployed snapshot carries the volatility model's out-of-sample forecasts
+    await expect(latest.getByRole("columnheader", { name: "P(high vol)" })).toBeVisible();
   }
 });
 
