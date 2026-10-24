@@ -6,10 +6,13 @@
 # main stack are applied locally with an admin login.
 
 locals {
-  account_id   = data.aws_caller_identity.current.account_id
-  region       = "us-east-2"
-  project      = "crypto-etl"
-  github_repo  = "PhaseYon/crypto-etl"
+  account_id = data.aws_caller_identity.current.account_id
+  region     = "us-east-2"
+  project    = "crypto-etl"
+  # GitHub issues this repository's tokens with immutable subjects: owner and repo carry their
+  # numeric IDs, so a renamed or re-created repo with the same name can't assume the role
+  # (gh api repos/PhaseYon/crypto-etl/actions/oidc/customization/sub)
+  github_repo  = "PhaseYon@122104297/crypto-etl@1399268791"
   ui_bucket    = "arn:aws:s3:::${local.project}-ui-${local.account_id}"
   lake_bucket  = "arn:aws:s3:::${local.project}-lake-${local.account_id}"
   api_function = "arn:aws:lambda:${local.region}:${local.account_id}:function:${local.project}-api"
