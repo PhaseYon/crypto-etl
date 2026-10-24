@@ -41,9 +41,15 @@ jobs:
           terraform_version: 1.17.0
           terraform_wrapper: false # scripts read `terraform output -raw` directly
       - run: terraform -chdir=infra init -input=false
+      - name: Log in to public ECR
+        # Anonymous pulls of the Lambda adapter image are rate-limited on shared runners
+        run: aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
       - name: Push API image
         id: image
-        run: echo "tag=$(infra/scripts/push-api.sh)" >> "$GITHUB_OUTPUT"
+        # A separate assignment so a failed build fails the step (inside echo it would be ignored)
+        run: |
+          tag=$(infra/scripts/push-api.sh)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - name: Update Lambda
         run: terraform -chdir=infra apply -input=false -auto-approve -var api_image_tag=${{ steps.image.outputs.tag }}
       - name: Deploy UI
