@@ -93,3 +93,22 @@ def test_backfill_counts(root, lake):
     counts = lake.backfill_counts(NOW.date())
     assert (counts.total, counts.backfilled) == (10, 2)
     assert lake.backfill_counts(NOW.date() + timedelta(days=1)).total == 0
+
+
+def test_predictions_newest_minutes_first(root, lake):
+    import pyarrow as pa
+    from deltalake import write_deltalake
+
+    created = NOW  # one batch: every row shares created_at
+    minutes = [utc_minute(m, NOW) for m in (30, 10, 20)]
+    table = pa.table(
+        {
+            "product_id": ["BTC-USD"] * 3,
+            "window_start": pa.array(minutes, pa.timestamp("us", tz="UTC")),
+            "probability": [0.1, 0.2, 0.3],
+            "created_at": pa.array([created] * 3, pa.timestamp("us", tz="UTC")),
+        }
+    )
+    write_deltalake(f"{root}/{TABLE_SPECS['predictions'].path}", table)
+    rows = lake.predictions(limit=2)
+    assert [r["probability"] for r in rows] == [0.2, 0.3]

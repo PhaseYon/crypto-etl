@@ -124,8 +124,9 @@ no longer accepts the plain file store).
 | `window_start` | timestamp | minute the features describe (UTC) |
 | `horizon_minutes` | long | the prediction is for `window_start + horizon` |
 | `model_run_id` | string | MLflow run id |
-| `p_up` | double | P(forward log return > 0) |
-| `predicted_label` | long | `p_up > 0.5` |
+| `target` | string | `direction` or `volatility`: what the model predicts |
+| `probability` | double | P(label = 1). direction: forward log return > 0; volatility: realized vol over the next `horizon_minutes` > its trailing-day median |
+| `predicted_label` | long | `probability > 0.5` |
 | `is_filled` | long | 1 if that minute had no trades (features from carried-forward prices) |
 | `created_at` | timestamp | |
 | `prediction_date` | date | partition column |

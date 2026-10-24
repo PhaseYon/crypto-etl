@@ -111,6 +111,8 @@ def model_meta(result: TrainResult, data_info: dict[str, Any]) -> dict[str, Any]
         "products": data_info["products"],
         "max_lookback_minutes": lookback,
         "trained_on": {k: data_info.get(k) for k in ("table_uri", "table_version", "start", "end")},
+        # Inference only scores minutes after val_end (+ horizon), which fitting and selection never saw
+        "split_bounds": result.split_bounds,
     }
 
 

@@ -43,8 +43,8 @@ from .runner import Outcome, SourceRunner
 from .sources.base import TABLE_SPECS, KafkaSource, LakeSource, PartitionWatermarks, TableSnapshot
 
 SEVERITY: dict[Health, int] = {"inactive": 0, "ok": 1, "stale": 2, "down": 3}
-# p_up and model_run_id are the contract columns (docs/CONTRACTS.md); the rest are tolerated fallbacks
-SCORE_COLUMNS = ("p_up", "score", "probability", "prob_up", "prediction", "y_pred")
+# probability and model_run_id are the contract columns (docs/CONTRACTS.md); the rest are tolerated fallbacks
+SCORE_COLUMNS = ("probability", "p_up", "score", "prob_up", "prediction", "y_pred")
 VERSION_COLUMNS = ("model_run_id", "model_version", "model")
 NOT_DEPLOYED = "not deployed: serving a snapshot of the lake"
 RECENT_QUARANTINE = 10
@@ -185,9 +185,12 @@ class PipelineService:
             return PredictionsResponse(
                 status="inactive", error=None, reason="ml/predictions has no rows yet", predictions=[]
             )
-        newest = max(
-            (p.created_at or p.window_start for p in predictions if p.created_at or p.window_start), default=None
+        # A snapshot's predictions may be written after it was taken; measure them by the minute they describe
+        stamps = (
+            p.window_start or p.created_at if self._s.snapshot_at else p.created_at or p.window_start
+            for p in predictions
         )
+        newest = max((t for t in stamps if t), default=None)
         verdict = freshness_verdict(
             freshness_seconds(newest, self._now()), self._s.predictions_stale_seconds, "newest prediction"
         )
@@ -471,10 +474,14 @@ def _to_prediction(row: dict[str, Any]) -> Prediction | None:
     except (TypeError, ValueError):
         score = None
     version = next((row[c] for c in VERSION_COLUMNS if row.get(c) is not None), None)
+    target = row.get("target")
+    horizon = row.get("horizon_minutes")
     return Prediction(
         product_id=str(product),
         window_start=_utc(row.get("window_start")),
         score=score,
+        target=str(target) if target else None,
+        horizon_minutes=horizon if isinstance(horizon, int) and not isinstance(horizon, bool) else None,
         model_version=None if version is None else str(version),
         created_at=_utc(row.get("created_at")),
     )

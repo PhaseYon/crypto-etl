@@ -75,7 +75,7 @@ def test_gold_to_predictions_on_s3(lake):
     assert len(preds) == 10
 
     out = DeltaTable(lake.table_uri("ml/predictions"), storage_options=lake.storage_options()).to_pandas()
-    assert len(out) == 10 and out["p_up"].between(0, 1).all()
+    assert len(out) == 10 and out["probability"].between(0, 1).all()
 
     predict.main(["--as-of", as_of, "--score-minutes", "5"])  # idempotent rerun
     out = DeltaTable(lake.table_uri("ml/predictions"), storage_options=lake.storage_options()).to_pandas()

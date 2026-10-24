@@ -162,6 +162,9 @@ class Prediction(BaseModel):
     product_id: str
     window_start: datetime | None
     score: float | None
+    # What score is the probability of: "direction" (price up) or "volatility" (high-vol regime)
+    target: str | None
+    horizon_minutes: int | None
     model_version: str | None
     created_at: datetime | None
 

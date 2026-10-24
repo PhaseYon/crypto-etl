@@ -1,0 +1,55 @@
+name: Deploy
+
+# Rolls out the dashboard after CI passes on main: new API image, Lambda update, UI upload, then
+# the Playwright smoke test against the live site. AWS access is OIDC: no stored keys.
+# The lake snapshot isn't touched (it's uploaded from a local lake with infra/scripts/upload-lake.sh).
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write # to request GitHub's OIDC token for AWS
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false # never interrupt a half-finished rollout
+
+env:
+  AWS_REGION: us-east-2
+  # Created by infra/bootstrap (github.tf); trusted only for workflows on main
+  AWS_ROLE_ARN: arn:aws:iam::071026217372:role/crypto-etl-github-deploy
+
+jobs:
+  deploy:
+    name: deploy dashboard
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.17.0
+          terraform_wrapper: false # scripts read `terraform output -raw` directly
+      - run: terraform -chdir=infra init -input=false
+      - name: Push API image
+        id: image
+        run: echo "tag=$(infra/scripts/push-api.sh)" >> "$GITHUB_OUTPUT"
+      - name: Update Lambda
+        run: terraform -chdir=infra apply -input=false -auto-approve -var api_image_tag=${{ steps.image.outputs.tag }}
+      - name: Deploy UI
+        run: infra/scripts/deploy-ui.sh
+      - name: Smoke test the live site
+        run: |
+          docker run --rm -v "$PWD/ui:/app" -w /app -u "$(id -u):$(id -g)" -e HOME=/tmp -e CI=1 \
+            -e E2E_SNAPSHOT=1 -e E2E_BASE_URL="$(terraform -chdir=infra output -raw site_url)" \
+            mcr.microsoft.com/playwright:v1.64.1-noble npx playwright test

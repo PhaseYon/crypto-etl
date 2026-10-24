@@ -20,6 +20,23 @@ export function latestByProduct(predictions: Prediction[], order: string[]): Pre
   );
 }
 
+/** What the scores mean, from the target and horizon the predictions carry. */
+export function describeTarget(predictions: Prediction[]): { subtitle: string; column: string } {
+  const targets = new Set(predictions.map((p) => p.target));
+  const horizon = predictions.find((p) => p.horizon_minutes !== null)?.horizon_minutes;
+  const ahead = horizon ? `the next ${horizon} min` : "the forecast horizon";
+  if (targets.size === 1 && targets.has("volatility")) {
+    return {
+      subtitle: `Probability that realized volatility over ${ahead} is above its trailing-day median`,
+      column: "P(high vol)",
+    };
+  }
+  if (targets.size === 1 && targets.has("direction")) {
+    return { subtitle: `Probability that the price is higher after ${ahead}`, column: "P(up)" };
+  }
+  return { subtitle: "Model score per product", column: "Score" };
+}
+
 function sortKey(p: Prediction): number {
   return Date.parse(p.window_start ?? p.created_at ?? "") || 0;
 }

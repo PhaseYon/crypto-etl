@@ -30,7 +30,8 @@ def test_scores_latest_minutes_and_writes_delta(trained):
     gold, out, run_id = trained
     preds = _predict(gold, out, "--score-minutes", "3")
     assert len(preds) == 6  # 2 products x 3 minutes
-    assert preds["p_up"].between(0, 1).all()
+    assert preds["probability"].between(0, 1).all()
+    assert set(preds["target"]) == {"direction"}
     assert set(preds["model_run_id"]) == {run_id}  # latest run used by default
     assert preds.groupby("product_id")["window_start"].max().max() >= pd.Timestamp(END) - pd.Timedelta(minutes=2)
     table = DeltaTable(out).to_pandas()
@@ -76,7 +77,8 @@ def test_stale_gold_fails_loudly(trained):
         main(["--table-uri", gold, "--output-uri", out, "--as-of", (END + timedelta(hours=2)).isoformat()])
 
 
-def test_volatility_models_are_refused(tmp_path):
+@pytest.fixture
+def volatility_run(tmp_path):
     from tests.test_training import regime_ohlcv
 
     gold = str(tmp_path / "gold")
@@ -84,6 +86,40 @@ def test_volatility_models_are_refused(tmp_path):
     write_ohlcv_delta(ohlcv, gold)
     args = ["--products", "BTC-USD", "--horizon", "15", "--target", "volatility", "--table-uri", gold]
     _, _, run_id = run(build_parser().parse_args(args))
-    as_of = ohlcv["window_start"].max().isoformat()
-    with pytest.raises(ValueError, match="volatility model"):
-        main(["--run-id", run_id, "--table-uri", gold, "--output-uri", str(tmp_path / "p"), "--as-of", as_of])
+    return gold, str(tmp_path / "p"), run_id, ohlcv["window_start"].max()
+
+
+def test_volatility_models_score_the_high_vol_probability(volatility_run):
+    gold, out, run_id, as_of = volatility_run
+    preds = main(["--run-id", run_id, "--table-uri", gold, "--output-uri", out, "--as-of", as_of.isoformat()])
+    assert len(preds) == 1
+    assert set(preds["target"]) == {"volatility"} and set(preds["horizon_minutes"]) == {15}
+    assert preds["probability"].between(0, 1).all()
+    assert set(DeltaTable(out).to_pandas()["target"]) == {"volatility"}
+
+
+def test_only_out_of_sample_minutes_are_scored(volatility_run):
+    from crypto_ml.predict import out_of_sample_start
+    from crypto_ml.tracking import load_model
+
+    gold, out, run_id, as_of = volatility_run
+    _, meta = load_model(run_id)
+    unseen_after = out_of_sample_start(meta)
+    assert unseen_after == pd.Timestamp(meta["split_bounds"]["val_end"]) + pd.Timedelta(minutes=15)
+    # Asking for far more minutes than the test period holds stops at the validation boundary
+    preds = main(
+        [
+            "--run-id",
+            run_id,
+            "--table-uri",
+            gold,
+            "--output-uri",
+            out,
+            "--as-of",
+            as_of.isoformat(),
+            "--score-minutes",
+            "100000",
+        ]
+    )
+    assert len(preds) > 0
+    assert (preds["window_start"] > unseen_after).all()

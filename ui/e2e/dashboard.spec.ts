@@ -1,11 +1,13 @@
 import { expect, test } from "@playwright/test";
 
 // Smoke test against the API in mock mode (DATA_SOURCE=mock): deterministic, no lake needed.
+// E2E_SNAPSHOT=1 runs it against a deployed snapshot instead (real data, no Kafka, no predictions).
+const snapshot = process.env.E2E_SNAPSHOT === "1";
 
 test("pipeline view renders every stage", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "crypto-etl" })).toBeVisible();
-  await expect(page.getByText("Mock data")).toBeVisible();
+  await expect(page.getByText(snapshot ? /^Snapshot · / : "Mock data")).toBeVisible();
   const stages = page.getByRole("list", { name: /pipeline stages/i }).getByRole("listitem");
   await expect(stages).toHaveCount(7);
   for (const name of [
@@ -44,12 +46,24 @@ test("switching product updates the chart", async ({ page }) => {
 
 test("data quality and ML views load", async ({ page }) => {
   await page.goto("/#/quality");
-  await expect(page.getByRole("list", { name: "Quarantined records by reason" })).toBeVisible();
+  if (snapshot) {
+    // The snapshot passed validation, so the reasons list is an empty state
+    await expect(
+      page.getByText("No quarantined records. Every record passed validation.").first(),
+    ).toBeVisible();
+  } else {
+    await expect(page.getByRole("list", { name: "Quarantined records by reason" })).toBeVisible();
+  }
   await page.getByRole("tab", { name: "ML" }).click();
   await expect(page).toHaveURL(/#\/ml$/);
   await expect(page.getByRole("heading", { name: "Model predictions" })).toBeVisible();
   // Named lookup: the chart library lays out its canvas with an internal <table>
-  await expect(page.getByRole("table", { name: "Latest prediction per product" })).toBeVisible();
+  const latest = page.getByRole("table", { name: "Latest prediction per product" });
+  await expect(latest).toBeVisible();
+  if (snapshot) {
+    // The deployed snapshot carries the volatility model's out-of-sample forecasts
+    await expect(latest.getByRole("columnheader", { name: "P(high vol)" })).toBeVisible();
+  }
 });
 
 test("theme toggle switches to dark", async ({ page }) => {

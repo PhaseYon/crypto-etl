@@ -18,6 +18,15 @@ def test_minio_storage_options():
     assert options["timeout"] == "4s"
 
 
+def test_temporary_credentials_include_the_session_token():
+    settings = Settings(
+        aws_access_key_id=SecretStr("ASIAEXAMPLE"),
+        aws_secret_access_key=SecretStr("secret"),
+        aws_session_token=SecretStr("token"),
+    )
+    assert settings.storage_options()["AWS_SESSION_TOKEN"] == "token"
+
+
 def test_real_aws_has_no_endpoint_override():
     options = Settings(s3_endpoint=None).storage_options()
     assert "AWS_ENDPOINT_URL" not in options

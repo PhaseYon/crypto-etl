@@ -23,6 +23,7 @@ from .services import PipelineService
 from .sources.base import KafkaSource, LakeSource, NotDeployedKafka
 
 PRODUCT_PATTERN = re.compile(r"^[A-Z0-9]{2,10}-[A-Z0-9]{2,10}$")
+SNAPSHOT_MAX_AGE_SECONDS = 300
 
 
 def get_service(request: Request) -> PipelineService:
@@ -81,11 +82,14 @@ def create_app(
     if settings.cors_origins:
         app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["GET"])
 
+    # Live responses change every poll, so they aren't cached downstream (the server-side cache handles
+    # load). A snapshot never changes, so a CDN may serve it without calling the API.
+    cache_control = "no-store" if settings.snapshot_at is None else f"public, max-age={SNAPSHOT_MAX_AGE_SECONDS}"
+
     @app.middleware("http")
-    async def no_store(request: Request, call_next):  # type: ignore[no-untyped-def]
+    async def set_cache_control(request: Request, call_next):  # type: ignore[no-untyped-def]
         response: Response = await call_next(request)
-        # Responses are live state; the server-side cache handles load
-        response.headers["Cache-Control"] = "no-store"
+        response.headers["Cache-Control"] = cache_control
         return response
 
     @app.get("/api/livez", response_model=LivenessResponse, tags=["ops"])

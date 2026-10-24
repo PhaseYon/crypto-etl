@@ -151,7 +151,8 @@ class TestPredictions:
                 "window_start": now,
                 "horizon_minutes": 5,
                 "model_run_id": "a1b2c3",
-                "p_up": 0.57,
+                "target": "volatility",
+                "probability": 0.57,
                 "predicted_label": 1,
                 "is_filled": 0,
                 "created_at": now,
@@ -159,6 +160,7 @@ class TestPredictions:
         ]
         response = asyncio.run(make_service(settings, lake=lake).predictions())
         assert [(p.product_id, p.score, p.model_version) for p in response.predictions] == [("BTC-USD", 0.57, "a1b2c3")]
+        assert (response.predictions[0].target, response.predictions[0].horizon_minutes) == ("volatility", 5)
 
     def test_tolerates_schema_variations(self, settings):
         now = datetime.now(UTC)
@@ -210,6 +212,19 @@ class TestSnapshotMode:
     def test_old_data_is_still_stale_relative_to_the_snapshot(self):
         lake = FakeLake(now=self.SNAPSHOT_AT - timedelta(hours=2))
         assert stages(asyncio.run(self.service(lake).pipeline()))["gold"].status == "stale"
+
+    def test_predictions_written_after_the_snapshot_are_aged_by_their_minute(self):
+        lake = FakeLake(now=self.SNAPSHOT_AT)
+        lake.prediction_rows = [
+            {
+                "product_id": "BTC-USD",
+                "window_start": self.SNAPSHOT_AT - timedelta(minutes=24),
+                "probability": 0.8,
+                "created_at": self.SNAPSHOT_AT + timedelta(days=2),  # scored later from the snapshot's data
+            }
+        ]
+        response = asyncio.run(self.service(lake).predictions())
+        assert response.reason == "newest prediction is 24m 0s old"
 
     def test_market_window_ends_at_the_snapshot(self):
         lake = FakeLake(now=self.SNAPSHOT_AT)

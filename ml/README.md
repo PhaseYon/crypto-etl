@@ -66,8 +66,8 @@ test is still touched once, for reporting.
 python -m crypto_ml.train --products BTC-USD,ETH-USD,SOL-USD --target volatility --horizon 60 --walk-forward 5
 ```
 
-`crypto_ml.predict` only accepts direction models for now: `ml/predictions` and the dashboard
-describe P(up), so a volatility model is refused rather than written under the wrong meaning.
+`crypto_ml.predict` scores both targets: each row in `ml/predictions` records its `target` and
+`probability`, so the dashboard labels it P(up) or P(high vol).
 
 Try it without a lake by writing synthetic data to a local table:
 
@@ -171,8 +171,9 @@ docker rm -f cetl-ml-s3
 | `window_start` | timestamp | minute the features describe (UTC) |
 | `horizon_minutes` | long | the prediction is for `window_start + horizon` |
 | `model_run_id` | string | MLflow run id |
-| `p_up` | double | P(forward log return > 0) |
-| `predicted_label` | long | `p_up > 0.5` |
+| `target` | string | `direction` or `volatility`: what the model predicts |
+| `probability` | double | P(label = 1). direction: forward log return > 0; volatility: realized vol over the next `horizon_minutes` > its trailing-day median |
+| `predicted_label` | long | `probability > 0.5` |
 | `is_filled` | long | 1 if that minute had no trades (features from carried-forward prices) |
 | `created_at` | timestamp | |
 | `prediction_date` | date | partition column |

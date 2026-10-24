@@ -223,3 +223,10 @@ spark-warehouse/
 metastore_db/
 .lake-local/
 .claude/worktrees/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
