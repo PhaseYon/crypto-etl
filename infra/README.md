@@ -34,6 +34,16 @@ docker run --rm -v "$PWD/ui:/app" -w /app -u "$(id -u):$(id -g)" -e HOME=/tmp \
   mcr.microsoft.com/playwright:v1.64.1-noble npx playwright test
 ```
 
+## Continuous deploy (GitHub Actions)
+
+`.github/workflows/deploy.yml` runs after CI passes on a push to main. It pushes the API image, updates the Lambda, uploads the UI, then runs the snapshot smoke test against the live URL.
+
+It logs in to AWS with OIDC: GitHub issues the workflow a short-lived token, and AWS trades it for temporary credentials for the `crypto-etl-github-deploy` role. That role is defined in `bootstrap/github.tf` and trusted only by workflows on `main` of this repository, so no AWS keys are stored in GitHub.
+
+The role can roll out code but can't create or delete infrastructure. Changes to the main stack's resources still need a local `terraform apply`.
+
+To enable it, apply the bootstrap once: `terraform -chdir=infra/bootstrap apply`. Until then the deploy job fails at its AWS login step.
+
 ## Load test
 
 `loadtest/api.js` is a k6 script that sends a mix of dashboard requests. To load Lambda, run it against `terraform output -raw api_endpoint`, after raising `api_rate_limit` and `api_burst_limit` for the run. To load the CDN, run it against `site_url`.
