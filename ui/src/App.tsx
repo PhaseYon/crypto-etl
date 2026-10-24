@@ -1,6 +1,7 @@
 import { useEffect, useState, type ComponentType } from "react";
 
 import { useMeta } from "./api/queries";
+import { formatTime } from "./lib/format";
 import { useThemePreference, type ThemePreference } from "./lib/theme";
 import { MarketView } from "./views/market/MarketView";
 import { MlView } from "./views/ml/MlView";
@@ -54,6 +55,14 @@ export function App() {
           {meta.data?.data_source === "mock" ? (
             <span className="chip" title="The API is serving generated demo data (DATA_SOURCE=mock)">
               Mock data
+            </span>
+          ) : null}
+          {meta.data?.snapshot_at ? (
+            <span
+              className="chip"
+              title="A frozen copy of the lake; the streaming stages (Coinbase, producer, Kafka) aren't deployed here"
+            >
+              Snapshot · {formatTime(meta.data.snapshot_at)} UTC
             </span>
           ) : null}
         </div>

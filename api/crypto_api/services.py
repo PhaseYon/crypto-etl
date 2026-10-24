@@ -46,6 +46,7 @@ SEVERITY: dict[Health, int] = {"inactive": 0, "ok": 1, "stale": 2, "down": 3}
 # p_up and model_run_id are the contract columns (docs/CONTRACTS.md); the rest are tolerated fallbacks
 SCORE_COLUMNS = ("p_up", "score", "probability", "prob_up", "prediction", "y_pred")
 VERSION_COLUMNS = ("model_run_id", "model_version", "model")
+NOT_DEPLOYED = "not deployed: serving a snapshot of the lake"
 RECENT_QUARANTINE = 10
 PREDICTIONS_LIMIT = 200
 
@@ -61,6 +62,9 @@ class PipelineService:
         self._lake = lake
         self._runner = runner
         self._tracker = IngestRateTracker()
+
+    def _now(self) -> datetime:
+        return self._s.snapshot_at or datetime.now(UTC)
 
     # ---- source reads (cached, timed out, never raising) ----
 
@@ -86,6 +90,7 @@ class PipelineService:
         return MetaResponse(
             version=__version__,
             data_source=s.data_source,
+            snapshot_at=s.snapshot_at,
             products=s.products,
             poll_interval_ms=s.poll_interval_ms,
             thresholds=Thresholds(
@@ -100,16 +105,22 @@ class PipelineService:
 
     async def pipeline(self) -> PipelineResponse:
         table_ids = list(TABLE_SPECS)
-        marks, retention, offsets, *snapshots = await asyncio.gather(
-            self._watermarks(),
-            self._retention(),
-            self._runner.call("lake.bronze_offsets", self._lake.bronze_max_offsets),
-            *(self._snapshot(t) for t in table_ids),
-        )
-        now = datetime.now(UTC)
+        if self._s.snapshot_at is not None:
+            # No Kafka in a snapshot: don't even try to reach it
+            snapshots = await asyncio.gather(*(self._snapshot(t) for t in table_ids))
+            kafka = self._not_deployed_kafka()
+            lag = LagDetail(status="inactive", error=None, total_lag=None, partitions=[])
+        else:
+            marks, retention, offsets, *snapshots = await asyncio.gather(
+                self._watermarks(),
+                self._retention(),
+                self._runner.call("lake.bronze_offsets", self._lake.bronze_max_offsets),
+                *(self._snapshot(t) for t in table_ids),
+            )
+            kafka = self._kafka_detail(marks, retention)
+            lag = self._lag_detail(marks, offsets)
+        now = self._now()
         tables = {t: self._table_status(t, outcome, now) for t, outcome in zip(table_ids, snapshots, strict=True)}
-        kafka = self._kafka_detail(marks, retention)
-        lag = self._lag_detail(marks, offsets)
         return PipelineResponse(
             generated_at=now,
             stages=self._stages(kafka, lag, tables),
@@ -119,7 +130,7 @@ class PipelineService:
         )
 
     async def market(self, product_id: str, minutes: int) -> MarketResponse:
-        since = datetime.now(UTC) - timedelta(minutes=minutes)
+        since = self._now() - timedelta(minutes=minutes)
         # Bucket the start to the minute so the cache key is stable across polls
         since = since.replace(second=0, microsecond=0)
         outcome = await self._runner.call(
@@ -146,14 +157,14 @@ class PipelineService:
         return MarketResponse(status="ok", error=None, candles=candles, **base)
 
     async def quality(self) -> QualityResponse:
-        since = (datetime.now(UTC) - timedelta(days=self._s.backfill_lookback_days)).date()
+        since = (self._now() - timedelta(days=self._s.backfill_lookback_days)).date()
         quarantine, gaps, backfill = await asyncio.gather(
             self._runner.call("lake.quarantine", self._lake.quarantine, RECENT_QUARANTINE),
             self._runner.call("lake.gaps", self._lake.latest_gaps),
             self._runner.call(f"lake.backfill.{since.isoformat()}", self._lake.backfill_counts, since),
         )
         return QualityResponse(
-            generated_at=datetime.now(UTC),
+            generated_at=self._now(),
             quarantine=_quarantine_summary(quarantine),
             gaps=_gaps_summary(gaps),
             backfill=_backfill_share(backfill, self._s.backfill_lookback_days),
@@ -178,11 +189,22 @@ class PipelineService:
             (p.created_at or p.window_start for p in predictions if p.created_at or p.window_start), default=None
         )
         verdict = freshness_verdict(
-            freshness_seconds(newest, datetime.now(UTC)), self._s.predictions_stale_seconds, "newest prediction"
+            freshness_seconds(newest, self._now()), self._s.predictions_stale_seconds, "newest prediction"
         )
         return PredictionsResponse(status=verdict.status, error=None, reason=verdict.reason, predictions=predictions)
 
     # ---- assembly ----
+
+    def _not_deployed_kafka(self) -> KafkaDetail:
+        return KafkaDetail(
+            status="inactive",
+            error=None,
+            topic=self._s.kafka_topic,
+            partitions=[],
+            retained_messages=None,
+            ingest_rate_per_second=None,
+            retention_hours=None,
+        )
 
     def _kafka_detail(self, marks: Outcome, retention: Outcome) -> KafkaDetail:
         retention_hours = retention.value / 3_600_000 if retention.ok and retention.value is not None else None
@@ -285,18 +307,25 @@ class PipelineService:
                 Metric(label="Delta version", value=t.version, unit="version"),
             ]
 
-        if kafka.status == "down":
+        if kafka.status == "inactive":
+            producer = Verdict("inactive", NOT_DEPLOYED)
+        elif kafka.status == "down":
             producer = Verdict("inactive", "unknown: Kafka is unreachable")
         else:
             producer = Verdict(kafka.status, f"inferred from Kafka ingest: {kafka_reason(kafka)}")
 
         bronze = tables["bronze"]
-        lag_verdict = Verdict(
-            lag.status,
-            lag.error or f"{lag.total_lag:,} messages behind Kafka (threshold {self._s.lag_stale_messages:,})",
-        )
+        if lag.error:
+            lag_reason = lag.error
+        elif lag.total_lag is None:
+            lag_reason = NOT_DEPLOYED
+        else:
+            lag_reason = f"{lag.total_lag:,} messages behind Kafka (threshold {self._s.lag_stale_messages:,})"
+        lag_verdict = Verdict(lag.status, lag_reason)
         bronze_verdict = worst(Verdict(bronze.status, bronze.reason), lag_verdict)
-        if bronze.status == "ok" and lag.status == "ok":
+        if lag.status == "inactive":
+            bronze_verdict = Verdict(bronze.status, bronze.reason)
+        elif bronze.status == "ok" and lag.status == "ok":
             bronze_verdict = Verdict("ok", f"{bronze.reason}; {lag_verdict.reason}")
 
         silver, gold, quarantine = tables["silver"], tables["gold"], tables["quarantine"]
@@ -361,6 +390,8 @@ class PipelineService:
 
 
 def kafka_reason(kafka: KafkaDetail) -> str:
+    if kafka.status == "inactive":
+        return NOT_DEPLOYED
     if kafka.status == "stale":
         return "no new messages within the threshold"
     if kafka.ingest_rate_per_second is None:

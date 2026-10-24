@@ -4,9 +4,10 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from conftest import FakeKafka, FakeLake
+from crypto_api.config import Settings
 from crypto_api.runner import SourceRunner
 from crypto_api.services import PipelineService
-from crypto_api.sources.base import PartitionWatermarks, TableSnapshot
+from crypto_api.sources.base import NotDeployedKafka, PartitionWatermarks, TableSnapshot
 
 
 def make_service(settings, kafka=None, lake=None, timeout=0.5):
@@ -183,3 +184,39 @@ class TestPredictions:
             {"product_id": "BTC-USD", "score": 0.5, "created_at": datetime.now(UTC) - timedelta(days=1)}
         ]
         assert asyncio.run(make_service(settings, lake=lake).predictions()).status == "stale"
+
+
+class TestSnapshotMode:
+    SNAPSHOT_AT = datetime(2026, 10, 22, 8, 10, tzinfo=UTC)
+
+    def service(self, lake=None):
+        settings = Settings(data_source="real", snapshot_at=self.SNAPSHOT_AT, source_timeout_seconds=0.5)
+        return make_service(settings, kafka=NotDeployedKafka(), lake=lake)
+
+    def test_freshness_is_measured_from_the_snapshot_and_kafka_is_not_deployed(self):
+        # Data as of 4 minutes before the snapshot, read days later: still fresh
+        lake = FakeLake(now=self.SNAPSHOT_AT - timedelta(minutes=4))
+        response = asyncio.run(self.service(lake).pipeline())
+        by_id = stages(response)
+        assert response.generated_at == self.SNAPSHOT_AT
+        for stage in ("bronze", "silver", "gold"):
+            assert by_id[stage].status == "ok", by_id[stage].reason
+        assert tables(response)["gold"].freshness_seconds == 240
+        for stage in ("producer", "kafka"):
+            assert by_id[stage].status == "inactive"
+            assert "not deployed" in by_id[stage].reason
+        assert response.lag.status == "inactive" and response.lag.total_lag is None
+
+    def test_old_data_is_still_stale_relative_to_the_snapshot(self):
+        lake = FakeLake(now=self.SNAPSHOT_AT - timedelta(hours=2))
+        assert stages(asyncio.run(self.service(lake).pipeline()))["gold"].status == "stale"
+
+    def test_market_window_ends_at_the_snapshot(self):
+        lake = FakeLake(now=self.SNAPSHOT_AT)
+        seen = []
+        lake.ohlcv = lambda product_id, since: seen.append(since) or []
+        asyncio.run(self.service(lake).market("BTC-USD", 60))
+        assert seen == [self.SNAPSHOT_AT - timedelta(minutes=60)]
+
+    def test_meta_exposes_the_snapshot(self):
+        assert self.service().meta().snapshot_at == self.SNAPSHOT_AT

@@ -83,4 +83,13 @@ describe("PipelineView", () => {
     expect((await screen.findAllByText(/refresh failing/)).length).toBeGreaterThan(0);
     expect(screen.getByTestId("stage-gold")).toBeInTheDocument();
   });
+
+  it("labels a snapshot instead of claiming to be live", async () => {
+    const snapshot = { ...fixtures.meta, data_source: "real" as const, snapshot_at: "2026-10-22T08:10:00Z" };
+    stubApi({ "/api/meta": snapshot, "/api/pipeline": fixtures.pipeline() });
+    renderWithClient(<PipelineView />);
+    expect(await screen.findByText(/^Snapshot taken /)).toBeInTheDocument();
+    expect(screen.getByText("State of each stage when the snapshot was taken")).toBeInTheDocument();
+    expect(screen.queryByText(/^Updated /)).not.toBeInTheDocument();
+  });
 });

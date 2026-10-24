@@ -88,3 +88,15 @@ def test_openapi_snapshot_is_current():
     """
     current = create_app(Settings()).openapi()
     assert json.loads(OPENAPI_SNAPSHOT.read_text()) == current
+
+
+def test_snapshot_mode_builds_no_kafka_client(tmp_path):
+    from datetime import UTC, datetime
+
+    from crypto_api.config import Settings
+    from crypto_api.main import build_sources
+    from crypto_api.sources.base import NotDeployedKafka
+
+    settings = Settings(data_source="real", lake_uri=str(tmp_path), snapshot_at=datetime(2026, 10, 22, tzinfo=UTC))
+    kafka, _ = build_sources(settings)
+    assert isinstance(kafka, NotDeployedKafka)

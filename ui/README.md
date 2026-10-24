@@ -51,18 +51,19 @@ Open http://localhost:5173.
 
 API (environment variables; the shared ones are documented in `.env.example` and `docs/CONTRACTS.md`):
 
-| Variable                              | Default                        | Meaning                                                                    |
-| ------------------------------------- | ------------------------------ | -------------------------------------------------------------------------- |
-| `DATA_SOURCE`                         | `real`                         | `mock` serves deterministic demo data shaped like the contract             |
-| `MOCK_SCENARIO`                       | `healthy`                      | `degraded` makes the mock object store unreachable (to see failure states) |
-| `KAFKA_BOOTSTRAP`, `KAFKA_TOPIC`      | `localhost:9092`, `raw.trades` |                                                                            |
-| `LAKE_BUCKET`, `S3_ENDPOINT`, `AWS_*` |                                | Same as the lake. Empty `S3_ENDPOINT` means real AWS S3                    |
-| `LAKE_URI`                            | `s3://$LAKE_BUCKET`            | Override the lake root, e.g. a local path                                  |
-| `PRODUCTS`                            | `BTC-USD,ETH-USD,SOL-USD`      | Products offered in the market view (others are rejected)                  |
-| `SOURCE_TIMEOUT_SECONDS`              | `4`                            | Upper bound for every Kafka / object-store call                            |
-| `CACHE_TTL_SECONDS`                   | `3`                            | How long source reads are shared between requests                          |
-| `POLL_INTERVAL_MS`                    | `5000`                         | The UI's base refresh interval                                             |
-| `CORS_ORIGINS`                        | empty                          | Only needed if the UI is served from another origin                        |
+| Variable                              | Default                        | Meaning                                                                                                                                                                                         |
+| ------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATA_SOURCE`                         | `real`                         | `mock` serves deterministic demo data shaped like the contract                                                                                                                                  |
+| `MOCK_SCENARIO`                       | `healthy`                      | `degraded` makes the mock object store unreachable (to see failure states)                                                                                                                      |
+| `SNAPSHOT_AT`                         | empty                          | Serve a frozen lake as of this UTC time (e.g. `2026-10-22T08:30:00Z`): Kafka shows as not deployed, freshness is measured from it, the UI stops polling. Pick a time after the last lake commit |
+| `KAFKA_BOOTSTRAP`, `KAFKA_TOPIC`      | `localhost:9092`, `raw.trades` |                                                                                                                                                                                                 |
+| `LAKE_BUCKET`, `S3_ENDPOINT`, `AWS_*` |                                | Same as the lake. Empty `S3_ENDPOINT` means real AWS S3                                                                                                                                         |
+| `LAKE_URI`                            | `s3://$LAKE_BUCKET`            | Override the lake root, e.g. a local path                                                                                                                                                       |
+| `PRODUCTS`                            | `BTC-USD,ETH-USD,SOL-USD`      | Products offered in the market view (others are rejected)                                                                                                                                       |
+| `SOURCE_TIMEOUT_SECONDS`              | `4`                            | Upper bound for every Kafka / object-store call                                                                                                                                                 |
+| `CACHE_TTL_SECONDS`                   | `3`                            | How long source reads are shared between requests                                                                                                                                               |
+| `POLL_INTERVAL_MS`                    | `5000`                         | The UI's base refresh interval                                                                                                                                                                  |
+| `CORS_ORIGINS`                        | empty                          | Only needed if the UI is served from another origin                                                                                                                                             |
 
 Compose (`ui/compose.yml`): `DASHBOARD_HOST_PORT` (3000), `DASHBOARD_API_HOST_PORT` (8000, bound to localhost),
 `DASHBOARD_DATA_SOURCE` (`real`).
