@@ -34,6 +34,14 @@ def test_mock_responses_validate(mock_client, path, params, model):
     model.model_validate(response.json())
 
 
+def test_snapshot_responses_are_cacheable():
+    settings = Settings(data_source="mock", snapshot_at="2026-10-22T08:30:00Z")
+    with TestClient(create_app(settings)) as client:
+        response = client.get("/api/meta")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, max-age=300"
+
+
 def test_mock_market_has_recent_candles(mock_client):
     body = mock_client.get("/api/market/ohlcv", params={"product": "BTC-USD", "minutes": 60}).json()
     assert body["status"] == "ok"

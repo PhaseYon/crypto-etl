@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     aws_region: str = "us-east-1"
     aws_access_key_id: SecretStr | None = None
     aws_secret_access_key: SecretStr | None = None
+    # Set alongside temporary credentials, e.g. by Lambda for its execution role
+    aws_session_token: SecretStr | None = None
 
     products_csv: str = Field(default="BTC-USD,ETH-USD,SOL-USD", alias="PRODUCTS")
 
@@ -81,6 +83,8 @@ class Settings(BaseSettings):
         if self.aws_access_key_id and self.aws_secret_access_key:
             options["AWS_ACCESS_KEY_ID"] = self.aws_access_key_id.get_secret_value()
             options["AWS_SECRET_ACCESS_KEY"] = self.aws_secret_access_key.get_secret_value()
+            if self.aws_session_token:
+                options["AWS_SESSION_TOKEN"] = self.aws_session_token.get_secret_value()
         if self.s3_endpoint:
             options["AWS_ENDPOINT_URL"] = self.s3_endpoint
             options["AWS_ALLOW_HTTP"] = "true" if self.s3_endpoint.startswith("http://") else "false"

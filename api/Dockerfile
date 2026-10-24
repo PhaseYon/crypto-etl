@@ -14,6 +14,12 @@ RUN pip install -r requirements.txt
 
 COPY crypto_api ./crypto_api
 
+# On AWS Lambda this extension turns invocations into HTTP requests to uvicorn; elsewhere it does nothing
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.0.1@sha256:1e5ab4d9242167500ed8a7bed8a79b448228aaa51cf382fb51fe4bf8a5f9a811 \
+  /lambda-adapter /opt/extensions/lambda-adapter
+ENV AWS_LWA_PORT=8000 \
+    AWS_LWA_READINESS_CHECK_PATH=/api/livez
+
 USER app
 EXPOSE 8000
 
