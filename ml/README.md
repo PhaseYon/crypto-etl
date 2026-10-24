@@ -66,8 +66,8 @@ test is still touched once, for reporting.
 python -m crypto_ml.train --products BTC-USD,ETH-USD,SOL-USD --target volatility --horizon 60 --walk-forward 5
 ```
 
-`crypto_ml.predict` only accepts direction models for now: `ml/predictions` and the dashboard
-describe P(up), so a volatility model is refused rather than written under the wrong meaning.
+`crypto_ml.predict` scores both targets: each row in `ml/predictions` records its `target` and
+`probability`, so the dashboard labels it P(up) or P(high vol).
 
 Try it without a lake by writing synthetic data to a local table:
 
