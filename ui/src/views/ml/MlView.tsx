@@ -5,7 +5,7 @@ import type { PredictionsResponse } from "../../api/types";
 import { HealthBadge } from "../../components/HealthBadge";
 import { Panel } from "../../components/Panel";
 import { formatAgo, formatTime } from "../../lib/format";
-import { latestByProduct, MAX_CHART_SERIES, scoreSeries } from "./predictions";
+import { describeTarget, latestByProduct, MAX_CHART_SERIES, scoreSeries } from "./predictions";
 import { ScoreChart } from "./ScoreChart";
 
 export function MlView() {
@@ -45,10 +45,13 @@ function PredictionsBody({ data, products }: { data: PredictionsResponse; produc
   const series = useMemo(() => scoreSeries(data.predictions, order), [data.predictions, order]);
   const latest = latestByProduct(data.predictions, order);
   const hidden = latest.length - series.length;
+  const meaning = describeTarget(data.predictions);
 
   return (
     <div className="stack">
-      <p className="panel-subtitle">{data.reason}</p>
+      <p className="panel-subtitle">
+        {meaning.subtitle} · {data.reason}
+      </p>
       {series.length > 0 ? <ScoreChart series={series} /> : null}
       {hidden > 0 ? (
         <p className="footer">
@@ -63,7 +66,7 @@ function PredictionsBody({ data, products }: { data: PredictionsResponse; produc
             <tr>
               <th scope="col">Product</th>
               <th scope="col" className="num">
-                Score
+                {meaning.column}
               </th>
               <th scope="col">Window</th>
               <th scope="col">Model</th>

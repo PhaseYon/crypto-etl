@@ -778,6 +778,28 @@
             ],
             "title": "Score"
           },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "horizon_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon Minutes"
+          },
           "model_version": {
             "anyOf": [
               {
@@ -807,6 +829,8 @@
           "product_id",
           "window_start",
           "score",
+          "target",
+          "horizon_minutes",
           "model_version",
           "created_at"
         ],

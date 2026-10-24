@@ -146,6 +146,8 @@ class MockLakeSource:
                         "product_id": product,
                         "window_start": datetime.fromtimestamp(minute * 60, tz=UTC),
                         "score": round(0.5 + 0.12 * math.sin(minute / 7) + rng.uniform(-0.05, 0.05), 4),
+                        "target": "direction",
+                        "horizon_minutes": 5,
                         "model_version": "3",
                         "created_at": datetime.fromtimestamp(minute * 60 + 10, tz=UTC),
                     }

@@ -6,7 +6,7 @@ import { charts, lightweightChartsMock } from "../../test/chartMock";
 import * as fixtures from "../../test/fixtures";
 import { renderWithClient, stubApi } from "../../test/render";
 import { MlView } from "./MlView";
-import { latestByProduct, scoreSeries } from "./predictions";
+import { describeTarget, latestByProduct, scoreSeries } from "./predictions";
 
 vi.mock("lightweight-charts", () => lightweightChartsMock());
 
@@ -14,6 +14,8 @@ const pred = (product_id: string, minute: number, score: number | null): Predict
   product_id,
   window_start: new Date(Date.UTC(2026, 9, 15, 12, minute)).toISOString(),
   score,
+  target: "volatility",
+  horizon_minutes: 60,
   model_version: "1",
   created_at: null,
 });
@@ -33,6 +35,17 @@ describe("prediction helpers", () => {
   it("colors follow the product, not its rank in the data", () => {
     const series = scoreSeries([pred("SOL-USD", 1, 0.5)], ["BTC-USD", "ETH-USD", "SOL-USD"]);
     expect(series).toEqual([{ product: "SOL-USD", slot: 2, data: [{ time: 1_792_065_660, value: 0.5 }] }]);
+  });
+
+  it("describes what the score is the probability of", () => {
+    expect(describeTarget([pred("BTC-USD", 1, 0.7)])).toEqual({
+      subtitle: "Probability that realized volatility over the next 60 min is above its trailing-day median",
+      column: "P(high vol)",
+    });
+    expect(
+      describeTarget([{ ...pred("BTC-USD", 1, 0.7), target: "direction", horizon_minutes: 5 }]).column,
+    ).toBe("P(up)");
+    expect(describeTarget([{ ...pred("BTC-USD", 1, 0.7), target: null }]).column).toBe("Score");
   });
 
   it("drops null scores, sorts points and caps the number of series", () => {
@@ -56,6 +69,7 @@ describe("MlView", () => {
     const table = await screen.findByRole("table");
     expect(within(table).getAllByRole("row")).toHaveLength(3); // header + BTC + ETH
     expect(within(table).getByText("0.600")).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: "P(up)" })).toBeInTheDocument();
     await waitFor(() => {
       expect(charts.at(-1)?.series.map((s) => s.type)).toEqual(["Line", "Line"]);
     });

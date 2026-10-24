@@ -313,6 +313,10 @@ export interface components {
             window_start: string | null;
             /** Score */
             score: number | null;
+            /** Target */
+            target: string | null;
+            /** Horizon Minutes */
+            horizon_minutes: number | null;
             /** Model Version */
             model_version: string | null;
             /** Created At */

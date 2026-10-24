@@ -1,7 +1,11 @@
-"""CLI: score the most recent minutes of gold/ohlcv_1m with a trained model.
+"""CLI: score the most recent minutes of gold/ohlcv_1m with a trained direction or volatility model.
 
-    python -m crypto_ml.predict                     # latest model, now, all its products
+    python -m crypto_ml.predict                     # latest direction model, now, all its products
     python -m crypto_ml.predict --run-id <id> --as-of 2026-10-08T12:00:00Z --score-minutes 30
+    python -m crypto_ml.predict --experiment crypto-volatility --as-of 2026-10-22T08:30:00Z --score-minutes 600
+
+Only minutes after the model's validation split (plus the label horizon) are scored, so every
+prediction is out of sample: neither fitting nor model selection saw those labels.
 
 Predictions are MERGEd into the ml/predictions Delta table on (product_id, window_start,
 model_run_id), so re-running for the same minutes updates rows instead of duplicating them.
@@ -19,7 +23,7 @@ from deltalake import DeltaTable, write_deltalake
 
 from crypto_ml.config import GOLD_OHLCV_PATH, PREDICTIONS_PATH, StorageConfig, normalize_uri, storage_options_for
 from crypto_ml.data import read_ohlcv
-from crypto_ml.features import build_features
+from crypto_ml.features import add_vol_regime, build_features
 from crypto_ml.tracking import DEFAULT_EXPERIMENT, latest_run_id, load_model
 from crypto_ml.train import parse_time
 
@@ -31,7 +35,8 @@ PREDICTIONS_SCHEMA = pa.schema(
         ("window_start", pa.timestamp("us", tz="UTC")),
         ("horizon_minutes", pa.int64()),
         ("model_run_id", pa.string()),
-        ("p_up", pa.float64()),
+        ("target", pa.string()),
+        ("probability", pa.float64()),
         ("predicted_label", pa.int64()),
         ("is_filled", pa.int64()),
         ("created_at", pa.timestamp("us", tz="UTC")),
@@ -48,27 +53,47 @@ class StaleDataError(RuntimeError):
 def score(
     model, meta: dict, ohlcv: pd.DataFrame, run_id: str, score_minutes: int, now: datetime | None = None
 ) -> pd.DataFrame:
-    """Predictions for the last `score_minutes` minutes of each product with complete features."""
+    """Predictions for the last `score_minutes` out-of-sample minutes of each product with complete features."""
     cols = meta["feature_columns"]
-    feats = build_features(ohlcv).dropna(subset=cols)
+    target = meta.get("target", "direction")
+    horizon = int(meta["horizon_minutes"])
+    feats = build_features(ohlcv)
+    if target == "volatility":
+        feats = add_vol_regime(feats, horizon)
+    feats = feats.dropna(subset=cols)
+    unseen_after = out_of_sample_start(meta)
+    if unseen_after is not None:
+        feats = feats[feats["window_start"] > unseen_after]
     latest = feats.groupby("product_id", sort=True).tail(score_minutes).reset_index(drop=True)
     if latest.empty:
         return PREDICTIONS_SCHEMA.empty_table().to_pandas()
-    p_up = model.predict_proba(latest[cols])[:, 1]
+    probability = model.predict_proba(latest[cols])[:, 1]
     created = pd.Timestamp(now or datetime.now(UTC))
     return pd.DataFrame(
         {
             "product_id": latest["product_id"],
             "window_start": latest["window_start"],
-            "horizon_minutes": int(meta["horizon_minutes"]),
+            "horizon_minutes": horizon,
             "model_run_id": run_id,
-            "p_up": p_up,
-            "predicted_label": (p_up > 0.5).astype("int64"),
+            "target": target,
+            "probability": probability,
+            "predicted_label": (probability > 0.5).astype("int64"),
             "is_filled": latest["is_filled"].astype("int64"),
             "created_at": created,
             "prediction_date": latest["window_start"].dt.date,
         }
     )
+
+
+def out_of_sample_start(meta: dict) -> pd.Timestamp | None:
+    """Last minute whose label the model's fitting or selection could have seen, if the run recorded it.
+
+    Validation labels look `horizon` minutes past the split's last row, so the gap is added too.
+    """
+    val_end = (meta.get("split_bounds") or {}).get("val_end")
+    if val_end is None:
+        return None  # older runs; live inference scores "now", which is always later
+    return pd.Timestamp(val_end) + pd.Timedelta(minutes=int(meta["horizon_minutes"]))
 
 
 def write_predictions(preds: pd.DataFrame, uri: str, storage_options: dict[str, str] | None = None) -> None:
@@ -113,9 +138,6 @@ def run(args: argparse.Namespace) -> pd.DataFrame:
     output_uri = args.output_uri or cfg.table_uri(PREDICTIONS_PATH)
     run_id = args.run_id or latest_run_id(args.experiment)
     model, meta = load_model(run_id)
-    if meta.get("target", "direction") != "direction":
-        # ml/predictions' contract (p_up, predicted_label) and the dashboard only describe direction
-        raise ValueError(f"run {run_id} is a {meta['target']} model; only direction models write {output_uri}")
     products = args.products.split(",") if args.products else meta["products"]
     as_of = args.as_of or datetime.now(UTC)
 
@@ -141,7 +163,7 @@ def _check_fresh(frame: pd.DataFrame, products: list[str], as_of: datetime, max_
 def main(argv: list[str] | None = None) -> pd.DataFrame:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     preds = run(build_parser().parse_args(argv))
-    print(preds[["product_id", "window_start", "p_up", "predicted_label"]].to_string(index=False))
+    print(preds[["product_id", "window_start", "target", "probability", "predicted_label"]].to_string(index=False))
     return preds
 
 

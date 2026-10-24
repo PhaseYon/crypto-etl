@@ -178,6 +178,8 @@ export function predictions(overrides: Partial<PredictionsResponse> = {}): Predi
       product_id: product,
       window_start: new Date(Date.parse(NOW) - i * 60_000).toISOString(),
       score: 0.5 + p * 0.1 - i * 0.01,
+      target: "direction",
+      horizon_minutes: 5,
       model_version: "3",
       created_at: new Date(Date.parse(NOW) - i * 60_000 + 10_000).toISOString(),
     })),
