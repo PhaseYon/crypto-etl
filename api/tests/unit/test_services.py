@@ -213,6 +213,19 @@ class TestSnapshotMode:
         lake = FakeLake(now=self.SNAPSHOT_AT - timedelta(hours=2))
         assert stages(asyncio.run(self.service(lake).pipeline()))["gold"].status == "stale"
 
+    def test_predictions_written_after_the_snapshot_are_aged_by_their_minute(self):
+        lake = FakeLake(now=self.SNAPSHOT_AT)
+        lake.prediction_rows = [
+            {
+                "product_id": "BTC-USD",
+                "window_start": self.SNAPSHOT_AT - timedelta(minutes=24),
+                "probability": 0.8,
+                "created_at": self.SNAPSHOT_AT + timedelta(days=2),  # scored later from the snapshot's data
+            }
+        ]
+        response = asyncio.run(self.service(lake).predictions())
+        assert response.reason == "newest prediction is 24m 0s old"
+
     def test_market_window_ends_at_the_snapshot(self):
         lake = FakeLake(now=self.SNAPSHOT_AT)
         seen = []

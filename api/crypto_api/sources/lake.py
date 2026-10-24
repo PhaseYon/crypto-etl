@@ -157,10 +157,10 @@ class DeltaLakeSource:
     def predictions(self, limit: int) -> list[dict[str, Any]]:
         dt = self._open(TABLE_SPECS["predictions"].path)
         table = dt.to_pyarrow_table()
-        for column in ("created_at", "window_start"):
-            if column in table.column_names:
-                table = table.sort_by([(column, "descending")])
-                break
+        # Newest predicted minutes first: a batch shares one created_at, so it only breaks ties
+        keys = [(c, "descending") for c in ("window_start", "created_at") if c in table.column_names]
+        if keys:
+            table = table.sort_by(keys)
         return table.slice(0, limit).to_pylist()
 
 

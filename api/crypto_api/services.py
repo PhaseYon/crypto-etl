@@ -185,9 +185,12 @@ class PipelineService:
             return PredictionsResponse(
                 status="inactive", error=None, reason="ml/predictions has no rows yet", predictions=[]
             )
-        newest = max(
-            (p.created_at or p.window_start for p in predictions if p.created_at or p.window_start), default=None
+        # A snapshot's predictions may be written after it was taken; measure them by the minute they describe
+        stamps = (
+            p.window_start or p.created_at if self._s.snapshot_at else p.created_at or p.window_start
+            for p in predictions
         )
+        newest = max((t for t in stamps if t), default=None)
         verdict = freshness_verdict(
             freshness_seconds(newest, self._now()), self._s.predictions_stale_seconds, "newest prediction"
         )
