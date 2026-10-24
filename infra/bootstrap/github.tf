@@ -69,6 +69,13 @@ data "aws_iam_policy_document" "github_deploy" {
     actions   = ["ecr:GetAuthorizationToken"]
     resources = ["*"] # account-wide by design; the token alone grants nothing
   }
+  # Authenticated pulls from public ECR (the Lambda adapter image): anonymous pulls from shared
+  # GitHub runners hit "429 Data limit exceeded"
+  statement {
+    sid       = "EcrPublicLogin"
+    actions   = ["ecr-public:GetAuthorizationToken", "sts:GetServiceBearerToken"]
+    resources = ["*"] # neither action supports resource-level permissions
+  }
   statement {
     sid = "EcrPushApiImage"
     actions = [
