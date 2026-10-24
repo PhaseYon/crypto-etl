@@ -80,10 +80,15 @@ resource "aws_lambda_function" "api" {
       SNAPSHOT_AT = var.snapshot_at
       LAKE_BUCKET = aws_s3_bucket.this["lake"].bucket
       PRODUCTS    = var.products
-      # The snapshot never changes, so reads can be cached for the life of the instance
-      CACHE_TTL_SECONDS = "3600"
+      # The snapshot never changes, but failed reads are cached too: keep a transient S3 error
+      # from sticking longer than CloudFront's 5-minute cache
+      CACHE_TTL_SECONDS = "300"
       # S3 reads from a cold instance are slower than from the local object store
       SOURCE_TIMEOUT_SECONDS = "10"
+      # Let a slow cold start finish during the first request instead of failing Lambda's 10s init limit
+      AWS_LWA_ASYNC_INIT = "true"
+      # delta-rs otherwise looks up the region from the EC2 metadata endpoint, which Lambda doesn't have
+      AWS_EC2_METADATA_DISABLED = "true"
     }
   }
 
@@ -139,14 +144,15 @@ resource "aws_apigatewayv2_stage" "default" {
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.api_access.arn
     format = jsonencode({
-      time     = "$context.requestTime"
-      ip       = "$context.identity.sourceIp"
-      method   = "$context.httpMethod"
-      path     = "$context.path"
-      status   = "$context.status"
-      latency  = "$context.responseLatency"
-      lambdaMs = "$context.integrationLatency"
-      error    = "$context.integrationErrorMessage"
+      requestId = "$context.requestId"
+      time      = "$context.requestTime"
+      ip        = "$context.identity.sourceIp"
+      method    = "$context.httpMethod"
+      path      = "$context.path"
+      status    = "$context.status"
+      latency   = "$context.responseLatency"
+      lambdaMs  = "$context.integrationLatency"
+      error     = "$context.integrationErrorMessage"
     })
   }
 }

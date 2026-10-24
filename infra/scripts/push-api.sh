@@ -16,9 +16,14 @@ fi
 if aws ecr describe-images --repository-name "${repo#*/}" --image-ids imageTag="$tag" >/dev/null 2>&1; then
   echo "already pushed: $repo:$tag" >&2
 else
-  aws ecr get-login-password --region "$region" | docker login --username AWS --password-stdin "$registry" >&2
   # Lambda needs a single-platform image manifest, not a multi-arch index
   docker build --platform linux/amd64 --provenance=false -t "$repo:$tag" api >&2
+  # Log in with a throwaway config: the ECR token (valid 12h) isn't kept, and Docker Desktop's
+  # credential helper on WSL can't be relied on
+  DOCKER_CONFIG=$(mktemp -d)
+  export DOCKER_CONFIG
+  trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+  aws ecr get-login-password --region "$region" | docker login --username AWS --password-stdin "$registry" >&2
   docker push "$repo:$tag" >&2
 fi
 echo "$tag"
